@@ -40,8 +40,7 @@ const ARCHETYPE_COLORS: Record<string, { line: string; glow: string }> = {
 };
 const INACTIVE_COLOR = "#94a3b8";
 const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN || "";
-// Stadia Maps Outdoors — MapLibre-native, free, no key needed for low traffic
-const STADIA_OUTDOORS_STYLE = "https://tiles.stadiamaps.com/styles/outdoors.json";
+const STADIA_KEY = process.env.REACT_APP_STADIA_KEY || "";
 
 // ---------------------------------------------------------------------------
 // Elevation Profile Strip
@@ -153,11 +152,11 @@ export default function RouteMap({
     if (!mlgl || !mapContainer.current || mapRef.current) return;
 
     const token = MAPBOX_TOKEN;
-    // Prefer Stadia Outdoors (MapLibre-native, works without token).
-    // Fall back to Mapbox outdoors only if explicitly configured and Stadia is unavailable.
-    const styleUrl = STADIA_OUTDOORS_STYLE || (token
-      ? `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12?access_token=${token}`
-      : "https://demotiles.maplibre.org/style.json");
+    const styleUrl = STADIA_KEY
+      ? `https://tiles.stadiamaps.com/styles/outdoors.json?api_key=${STADIA_KEY}`
+      : token
+        ? `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12?access_token=${token}`
+        : "https://demotiles.maplibre.org/style.json";
 
     const map = new mlgl.Map({
       container: mapContainer.current,
