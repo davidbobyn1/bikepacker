@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import RouteMap from "./RouteMap";
 import ConfidenceBadge from "./ConfidenceBadge";
-import type { RouteOption, ConfidenceLevel, TerrainNote } from "../../types/route";
+import type { RouteOption, TerrainNote } from "../../types/route";
 
 const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8000/api";
 const getFullGpxUrl = (gpxUrl: string) => {

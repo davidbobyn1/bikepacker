@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 /**
  * RouteMap.tsx — MapLibre GL powered route map
  *
@@ -22,7 +22,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { RouteOption } from "../../types/route";
 
 // We load MapLibre dynamically to avoid SSR issues
-let maplibregl: typeof import("maplibre-gl") | null = null;
 
 interface RouteMapProps {
   route?: RouteOption;           // single-route mode (legacy compat)
@@ -135,14 +134,14 @@ export default function RouteMap({
   const [mlgl, setMlgl] = useState<typeof import("maplibre-gl") | null>(null);
 
   // Normalise: support both single-route (legacy) and multi-route modes
-  const routes: RouteOption[] = multiRoutes ?? (singleRoute ? [singleRoute] : []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const routes: RouteOption[] = useMemo(() => multiRoutes ?? (singleRoute ? [singleRoute] : []), [multiRoutes, singleRoute]);
   const effectiveActiveId = activeRouteId ?? routes[0]?.id ?? null;
   const activeRoute = routes.find((r) => r.id === effectiveActiveId) ?? routes[0] ?? null;
 
   // Load MapLibre dynamically
   useEffect(() => {
     import("maplibre-gl").then((mod) => {
-      maplibregl = mod;
       setMlgl(mod);
     });
   }, []);
