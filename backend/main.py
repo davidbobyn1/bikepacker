@@ -41,6 +41,15 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("Enabling PostGIS extension if not present...")
+    try:
+        with engine.connect() as conn:
+            conn.execute(__import__('sqlalchemy').text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+            conn.commit()
+        logger.info("PostGIS extension ready.")
+    except Exception as exc:
+        logger.warning("Could not enable PostGIS extension (may already exist): %s", exc)
+
     logger.info("Creating database tables if they don't exist...")
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ready.")
