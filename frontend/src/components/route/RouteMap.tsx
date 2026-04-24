@@ -150,7 +150,6 @@ export default function RouteMap({
   useEffect(() => {
     if (!mlgl || !mapContainer.current || mapRef.current) return;
 
-    const token = MAPBOX_TOKEN;
     const styleUrl = "https://tiles.stadiamaps.com/styles/outdoors.json";
 
     const map = new mlgl.Map({
