@@ -148,25 +148,34 @@ export default function RouteMap({
   useEffect(() => {
     if (!mlgl || !mapContainer.current || mapRef.current) return;
 
-    const styleUrl = "https://tiles.stadiamaps.com/styles/outdoors.json";
+    let cancelled = false;
 
-    const map = new mlgl.Map({
-      container: mapContainer.current,
-      style: styleUrl,
-      center: [-122.59, 37.99],
-      zoom: 10,
-      attributionControl: false,
-    });
-
-    map.addControl(new mlgl.NavigationControl(), "top-right");
-    map.addControl(new mlgl.AttributionControl({ compact: true }), "bottom-right");
-    map.on("load", () => setMapReady(true));
-    mapRef.current = map;
+    fetch("https://tiles.stadiamaps.com/styles/outdoors.json")
+      .then((r) => r.json())
+      .then((style) => {
+        if (cancelled || !mapContainer.current) return;
+        // MapLibre v5 strict validator rejects the root-level "name" property
+        delete style.name;
+        const map = new mlgl.Map({
+          container: mapContainer.current,
+          style,
+          center: [-122.59, 37.99],
+          zoom: 10,
+          attributionControl: false,
+        });
+        map.addControl(new mlgl.NavigationControl(), "top-right");
+        map.addControl(new mlgl.AttributionControl({ compact: true }), "bottom-right");
+        map.on("load", () => setMapReady(true));
+        mapRef.current = map;
+      });
 
     return () => {
-      map.remove();
-      mapRef.current = null;
-      setMapReady(false);
+      cancelled = true;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        setMapReady(false);
+      }
     };
   }, [mlgl]);
 
