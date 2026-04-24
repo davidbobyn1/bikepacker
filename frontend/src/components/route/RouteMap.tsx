@@ -29,7 +29,6 @@ interface RouteMapProps {
   activeRouteId?: string | null;
   compareMode?: boolean;
   onRouteClick?: (routeId: string) => void;
-  mapboxToken?: string;
   className?: string;
 }
 
@@ -39,7 +38,6 @@ const ARCHETYPE_COLORS: Record<string, { line: string; glow: string }> = {
   adventurous: { line: "#10b981", glow: "#6ee7b7" },
 };
 const INACTIVE_COLOR = "#94a3b8";
-const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN || "";
 
 // ---------------------------------------------------------------------------
 // Elevation Profile Strip
