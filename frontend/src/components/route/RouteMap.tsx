@@ -40,7 +40,6 @@ const ARCHETYPE_COLORS: Record<string, { line: string; glow: string }> = {
 };
 const INACTIVE_COLOR = "#94a3b8";
 const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN || "";
-const STADIA_KEY = process.env.REACT_APP_STADIA_KEY || "";
 
 // ---------------------------------------------------------------------------
 // Elevation Profile Strip
@@ -152,11 +151,7 @@ export default function RouteMap({
     if (!mlgl || !mapContainer.current || mapRef.current) return;
 
     const token = MAPBOX_TOKEN;
-    const styleUrl = STADIA_KEY
-      ? `https://tiles.stadiamaps.com/styles/outdoors.json?api_key=${STADIA_KEY}`
-      : token
-        ? `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12?access_token=${token}`
-        : "https://demotiles.maplibre.org/style.json";
+    const styleUrl = "https://tiles.stadiamaps.com/styles/outdoors.json";
 
     const map = new mlgl.Map({
       container: mapContainer.current,
