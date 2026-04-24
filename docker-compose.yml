@@ -1,0 +1,21 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgis/postgis:15-3.4
+    environment:
+      POSTGRES_DB: bikeplanner
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d bikeplanner"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

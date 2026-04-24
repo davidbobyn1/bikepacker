@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+dist/
+
+# Node
+frontend/node_modules/
+frontend/build/
+
+# Environment — NEVER commit secrets
+.env
+.env.local
+.env.production.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker volumes
+pgdata/
