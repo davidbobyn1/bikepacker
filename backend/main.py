@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, distinct
 from sqlalchemy.orm import Session
 
-from backend.api import parse, generate, generate_full, finalize, routes
+from backend.api import parse, generate, generate_full, finalize, routes, gpx_inline
 from backend.db.models import Base, Edge
 from backend.db.session import engine
 from backend.modules.planner.leg_generator import load_graph, load_merged_graph
@@ -97,6 +97,7 @@ app.include_router(generate.router, prefix="/api", tags=["generate"])
 app.include_router(generate_full.router, prefix="/api", tags=["generate"])
 app.include_router(finalize.router, prefix="/api", tags=["finalize"])
 app.include_router(routes.router, prefix="/api", tags=["routes"])
+app.include_router(gpx_inline.router, prefix="/api", tags=["gpx"])
 
 # ---------------------------------------------------------------------------
 # Health

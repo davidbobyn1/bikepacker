@@ -33,6 +33,7 @@ from backend.modules.parser.intent_parser import parse_trip_request, validate_tr
 from backend.modules.planner.corridor_planner import plan_routes, PlannedRoute
 from backend.modules.ai.trip_narrator import generate_narratives_for_routes
 from backend.modules.routing.mapbox_router import get_usage_today, MapboxBudgetExceeded
+from backend.api.gpx_inline import store_route_geometry
 from backend.schemas.trip_spec import TripSpec, RiderProfile, TripPreferences
 
 logger = logging.getLogger(__name__)
@@ -201,7 +202,7 @@ def _map_route_to_response(
     ]
 
     route_id = f"{request_id}-{rank}"
-    gpx_url = f"/api/route/{route_id}/gpx"
+    gpx_url = f"/api/gpx/{route_id}"
 
     return {
         "id": route_id,
@@ -424,6 +425,18 @@ def generate_full(body: GenerateFullRequest, db: Session = Depends(get_db)):
     for rank, (route, narrative) in enumerate(zip(planned_routes, narratives)):
         try:
             option = _map_route_to_response(route, narrative, spec, request_id, rank)
+            # Store geometry in cache so /api/gpx/{route_id} can serve it
+            store_route_geometry(
+                option["id"],
+                option["geometry"],
+                {
+                    "trip_title": option.get("trip_title", ""),
+                    "total_distance_km": option.get("total_distance_km", 0),
+                    "total_climbing_m": option.get("total_climbing_m", 0),
+                    "gravel_ratio": option.get("gravel_ratio", 0),
+                    "overnight_areas": option.get("overnight_areas", []),
+                },
+            )
             route_options.append(option)
         except Exception as exc:
             logger.warning("Failed to map route %d: %s", rank, exc)

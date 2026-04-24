@@ -10,6 +10,15 @@ import RouteMap from "./RouteMap";
 import ConfidenceBadge from "./ConfidenceBadge";
 import type { RouteOption, ConfidenceLevel, TerrainNote } from "../../types/route";
 
+const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8000/api";
+const getFullGpxUrl = (gpxUrl: string) => {
+  if (!gpxUrl) return "#";
+  if (gpxUrl.startsWith("http")) return gpxUrl;
+  // Strip /api prefix from gpxUrl if API_BASE already includes it
+  const path = gpxUrl.startsWith("/api/") ? gpxUrl.slice(4) : gpxUrl;
+  return `${API_BASE}${path}`;
+};
+
 interface RouteDetailProps {
   route: RouteOption;
   onBack: () => void;
@@ -96,8 +105,10 @@ export default function RouteDetail({ route, onBack }: RouteDetailProps) {
 
           {/* GPX download */}
           <a
-            href={route.gpx_url}
+            href={getFullGpxUrl(route.gpx_url)}
             download
+            target="_blank"
+            rel="noopener noreferrer"
             className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
           >
             <Download className="w-4 h-4" /> Download GPX File
@@ -348,8 +359,10 @@ export default function RouteDetail({ route, onBack }: RouteDetailProps) {
       {/* Bottom GPX CTA */}
       <div className="flex justify-center pb-4">
         <a
-          href={route.gpx_url}
+          href={getFullGpxUrl(route.gpx_url)}
           download
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-8 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
         >
           <Download className="w-4 h-4" /> Download GPX & Start Planning
