@@ -12,8 +12,8 @@ import logging
 import sys
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
 
 from backend.api import parse, generate, generate_full, finalize, routes, gpx_inline
 from backend.db.models import Base
@@ -55,19 +55,38 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://bikepacker-uezr.vercel.app",
-        "https://bikepacker.vercel.app",
-    ],
-    allow_origin_regex=r"https://bikepacker.*\.vercel\.app",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+ALLOWED_ORIGINS = {
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://bikepacker-uezr.vercel.app",
+    "https://bikepacker.vercel.app",
+}
+
+@app.middleware("http")
+async def cors_middleware(request: Request, call_next):
+    origin = request.headers.get("origin", "")
+    # Allow any vercel.app subdomain or localhost
+    allowed = (
+        origin in ALLOWED_ORIGINS
+        or origin.endswith(".vercel.app")
+        or origin.startswith("http://localhost")
+    )
+    if request.method == "OPTIONS":
+        response = Response(status_code=200)
+        if allowed:
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            response.headers["Access-Control-Max-Age"] = "600"
+        return response
+    response = await call_next(request)
+    if allowed:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
 
 # ---------------------------------------------------------------------------
 # Routers
