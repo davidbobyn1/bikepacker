@@ -33,8 +33,8 @@ The JSON must conform exactly to the schema below. Apply all defaults and infere
 OUTPUT SCHEMA:
 
 {
-  "region": string,                        // e.g. "north_bay", "marin", "point_reyes", "sonoma"
-                                           // default: "north_bay" if near SF and unspecified
+  "region": string,                        // slug for the geographic region, e.g. "north_bay", "cape_cod", "dolomites", "kyoto_area"
+                                           // derive from place names mentioned; use snake_case; default: "unknown" if unspecified
   "origin_preference": string | null,      // city or hub name if mentioned, else null
 
   "trip_days": {
@@ -159,12 +159,13 @@ If distance is not mentioned, infer from trip_days and rider fitness:
 ---
 
 REGION INFERENCE:
-
-If user says "north of SF", "Marin", "North Bay", "Point Reyes", "Sonoma" → region: "north_bay"
-If user says "peninsula", "south bay", "Santa Cruz" → region: "peninsula" (not yet supported, note in parser_notes)
-If user says "East Bay", "Berkeley hills" → region: "east_bay" (not yet supported, note in parser_notes)
-
-For unsupported regions, still parse fully but set a parser_notes flag.
+Derive the region slug from any place names the user mentions. Use snake_case. Examples:
+  "Marin", "North Bay", "Point Reyes", "Sonoma" → "north_bay"
+  "Cape Cod", "Boston" → "cape_cod"
+  "Dolomites", "South Tyrol" → "dolomites"
+  "Kyoto", "Japan" → "kyoto_area"
+  "Scottish Highlands" → "scottish_highlands"
+If no region is mentioned, use "unknown". Always parse fully regardless of region.
 
 ---
 
@@ -234,9 +235,7 @@ def validate_trip_spec(spec: dict) -> list[str]:
     if days.get("min", 2) < 1 or days.get("max", 3) > 7:
         errors.append("trip_days out of supported range (1–7)")
 
-    valid_regions = {"north_bay", "marin", "point_reyes", "sonoma"}
-    if spec.get("region") not in valid_regions:
-        errors.append(f"region '{spec.get('region')}' not yet supported")
+    # Region validation removed — Mapbox routing supports any location worldwide
 
     rider = spec.get("rider_profile", {})
     if rider.get("comfort_daily_km", 1) <= 0:

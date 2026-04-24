@@ -281,7 +281,7 @@ def plan_routes(
     strava_token = strava_token or _settings.strava_access_token or os.environ.get("STRAVA_ACCESS_TOKEN", "")
 
     # Resolve origin coordinates
-    origin = _resolve_origin(spec)
+    origin = _resolve_origin(spec, mapbox_token=mapbox_token)
     target_km = (spec.total_distance_km.min + spec.total_distance_km.max) / 2
     trip_days = spec.trip_days.min
     daily_km = spec.rider_profile.comfort_daily_km
@@ -408,39 +408,46 @@ def _interleave_waypoints(
     return combined
 
 
-def _resolve_origin(spec: TripSpec) -> tuple[float, float]:
+def _resolve_origin(spec: TripSpec, mapbox_token: str = "") -> tuple[float, float]:
     """
     Resolve the origin coordinates from the TripSpec.
-
-    Uses the origin_preference string to look up known hubs, or falls back
-    to the center of the North Bay region.
+    Uses Mapbox Geocoding API to resolve any location worldwide.
+    Falls back to Fairfax, CA if geocoding fails.
     """
-    # Known origin hubs for the North Bay region
-    KNOWN_HUBS = {
-        "fairfax":       (37.9874, -122.5894),
-        "san_anselmo":   (37.9749, -122.5619),
-        "mill_valley":   (37.9060, -122.5455),
-        "san_rafael":    (37.9735, -122.5311),
-        "point_reyes":   (38.0713, -122.8006),
-        "petaluma":      (38.2324, -122.6367),
-        "santa_rosa":    (38.4404, -122.7141),
-        "novato":        (38.1074, -122.5697),
-        "sausalito":     (37.8590, -122.4852),
-        "tiburon":       (37.8904, -122.4566),
-    }
+    import requests as _requests
+    from urllib.parse import quote as _quote
 
-    pref = (spec.origin_preference or "").lower().replace(" ", "_")
-    if pref in KNOWN_HUBS:
-        return KNOWN_HUBS[pref]
+    # Build a query from origin_preference or region
+    query = (spec.origin_preference or "").strip()
+    if not query:
+        query = spec.region.replace("_", " ") if spec.region and spec.region != "unknown" else ""
+    if not query:
+        logger.warning("No origin or region specified — defaulting to Fairfax, CA")
+        return (37.9874, -122.5894)
 
-    # Fuzzy match
-    for hub_name, coords in KNOWN_HUBS.items():
-        if pref and (pref in hub_name or hub_name in pref):
-            return coords
+    token = mapbox_token
+    if not token:
+        from backend.config import settings as _s
+        token = _s.mapbox_token or ""
 
-    # Default: Fairfax (classic North Bay bikepacking hub)
-    logger.info("Origin '%s' not found in known hubs — defaulting to Fairfax", pref)
-    return KNOWN_HUBS["fairfax"]
+    try:
+        url = f"https://api.mapbox.com/geocoding/v5/mapbox.places/{_quote(query)}.json"
+        resp = _requests.get(
+            url,
+            params={"access_token": token, "limit": 1, "types": "place,locality,region,address"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        features = resp.json().get("features", [])
+        if features:
+            lon, lat = features[0]["center"]
+            logger.info("Geocoded '%s' → (%.4f, %.4f)", query, lat, lon)
+            return (lat, lon)
+        logger.warning("Geocoding returned no results for '%s' — defaulting to Fairfax, CA", query)
+    except Exception as exc:
+        logger.warning("Geocoding failed for '%s': %s — defaulting to Fairfax, CA", query, exc)
+
+    return (37.9874, -122.5894)
 
 
 def _attach_overnight_stops(
