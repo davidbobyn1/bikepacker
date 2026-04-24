@@ -150,12 +150,10 @@ export default function RouteMap({
 
     let cancelled = false;
 
-    fetch("https://tiles.stadiamaps.com/styles/outdoors.json")
+    fetch("https://tiles.openfreemap.org/styles/bright")
       .then((r) => r.json())
       .then((style) => {
         if (cancelled || !mapContainer.current) return;
-        // MapLibre v5 strict validator rejects the root-level "name" property
-        delete style.name;
         const map = new mlgl.Map({
           container: mapContainer.current,
           style,
