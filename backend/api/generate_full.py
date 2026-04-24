@@ -368,16 +368,17 @@ def generate_full(body: GenerateFullRequest, db: Session = Depends(get_db)):
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"TripSpec validation error: {exc}")
 
-    # Step 4 — Persist TripRequest
-    db_request = TripRequest(
-        id=request_id,
-        raw_prompt=body.prompt,
-        parsed_constraints_json=spec_dict,
-        rider_profile_json=spec_dict.get("rider_profile"),
-        region=spec.region,
-    )
-    db.add(db_request)
-    db.commit()
+    # Step 4 — Persist TripRequest (best-effort — skipped if DB unavailable)
+    if db is not None:
+        db_request = TripRequest(
+            id=request_id,
+            raw_prompt=body.prompt,
+            parsed_constraints_json=spec_dict,
+            rider_profile_json=spec_dict.get("rider_profile"),
+            region=spec.region,
+        )
+        db.add(db_request)
+        db.commit()
 
     # Step 5 — Run the corridor-first planning pipeline
     from backend.config import settings as _settings

@@ -51,16 +51,17 @@ def parse(body: ParseRequest, db: Session = Depends(get_db)) -> ParseResponse:
         logger.exception("TripSpec schema validation failed: %s", exc)
         raise HTTPException(status_code=400, detail=f"Schema validation error: {exc}")
 
-    # Persist the request
-    db_request = TripRequest(
-        id=request_id,
-        raw_prompt=body.prompt,
-        parsed_constraints_json=raw_spec,
-        rider_profile_json=raw_spec.get("rider_profile"),
-        region=trip_spec.region,
-    )
-    db.add(db_request)
-    db.commit()
+    # Persist the request (best-effort — skipped if DB unavailable)
+    if db is not None:
+        db_request = TripRequest(
+            id=request_id,
+            raw_prompt=body.prompt,
+            parsed_constraints_json=raw_spec,
+            rider_profile_json=raw_spec.get("rider_profile"),
+            region=trip_spec.region,
+        )
+        db.add(db_request)
+        db.commit()
 
     logger.info(
         "parse complete request_id=%s region=%s days=%s-%s dist=%.0f-%.0f km",

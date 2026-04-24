@@ -22,9 +22,18 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db() -> Generator[Session, None, None]:
-    """FastAPI dependency that yields a DB session and ensures cleanup."""
+    """FastAPI dependency that yields a DB session and ensures cleanup.
+    Yields None if the database is unreachable so routes degrade gracefully."""
     db = SessionLocal()
     try:
+        db.execute(__import__("sqlalchemy").text("SELECT 1"))
         yield db
-    finally:
+    except Exception:
         db.close()
+        yield None
+        return
+    finally:
+        try:
+            db.close()
+        except Exception:
+            pass
