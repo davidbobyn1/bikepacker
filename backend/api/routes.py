@@ -9,68 +9,17 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse, Response
-from geoalchemy2.shape import to_shape
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.db.models import CandidateRoute as CandidateRouteORM
 from backend.db.models import FinalRoute as FinalRouteORM
 from backend.db.session import get_db
-from backend.schemas.route import CandidateRoute, FinalRoute, RouteMetrics, RouteSummary
-from backend.schemas.poi import OvernightStop
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-
-@router.get("/candidate/{candidate_id}/gpx")
-def candidate_gpx(candidate_id: int, db: Session = Depends(get_db)) -> Response:
-    """
-    Generate and return a GPX file for a CandidateRoute by its DB id.
-
-    Works directly on CandidateRoute records created by /api/generate-full,
-    without requiring a FinalRoute to exist. Geometry is read from the stored
-    PostGIS LineString.
-    """
-    import gpxpy
-    import gpxpy.gpx
-
-    row = db.execute(
-        select(CandidateRouteORM).where(CandidateRouteORM.id == candidate_id)
-    ).scalar_one_or_none()
-
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"candidate_id {candidate_id} not found")
-    if row.geometry is None:
-        raise HTTPException(status_code=404, detail="No geometry stored for this candidate")
-
-    gpx = gpxpy.gpx.GPX()
-    gpx.name = f"Bikepacking Route {candidate_id}"
-    gpx.description = (
-        f"{row.total_distance_km:.0f} km, "
-        f"{row.total_climbing_m:.0f} m climbing, "
-        f"{(row.gravel_ratio or 0) * 100:.0f}% gravel"
-        if row.total_distance_km else ""
-    )
-
-    track = gpxpy.gpx.GPXTrack()
-    gpx.tracks.append(track)
-    seg = gpxpy.gpx.GPXTrackSegment()
-    track.segments.append(seg)
-
-    shape = to_shape(row.geometry)   # PostGIS LineString stores (lon, lat)
-    for lon, lat in shape.coords:
-        seg.points.append(gpxpy.gpx.GPXTrackPoint(latitude=lat, longitude=lon))
-
-    content = gpx.to_xml()
-    return Response(
-        content=content,
-        media_type="application/gpx+xml",
-        headers={
-            "Content-Disposition": f'attachment; filename="route_{candidate_id}.gpx"'
-        },
-    )
 
 
 @router.get("/route/{route_id}")

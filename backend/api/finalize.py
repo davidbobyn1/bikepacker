@@ -68,7 +68,6 @@ def finalize(body: FinalizeRequest, db: Session = Depends(get_db)) -> FinalizeRe
     import gpxpy
     import gpxpy.gpx
     from datetime import datetime
-    from geoalchemy2.shape import to_shape
 
     gpx = gpxpy.gpx.GPX()
     metrics = candidate_orm.route_metrics_json or {}
@@ -85,18 +84,21 @@ def finalize(body: FinalizeRequest, db: Session = Depends(get_db)) -> FinalizeRe
     gpx.author_name = "Bikepacking Planner"
     gpx.time = datetime.utcnow()
 
-    # --- Track segment from stored PostGIS geometry ---
-    if candidate_orm.geometry is not None:
+    # --- Track segment from stored GeoJSON geometry ---
+    if candidate_orm.geometry_geojson:
         try:
-            line = to_shape(candidate_orm.geometry)
-            track = gpxpy.gpx.GPXTrack()
-            track.name = gpx.name
-            gpx.tracks.append(track)
-            segment = gpxpy.gpx.GPXTrackSegment()
-            track.segments.append(segment)
-            for lon, lat in line.coords:
-                segment.points.append(gpxpy.gpx.GPXTrackPoint(latitude=lat, longitude=lon))
-            logger.info("GPX track: %d points from stored geometry", len(segment.points))
+            geojson = json.loads(candidate_orm.geometry_geojson)
+            coords = geojson.get("coordinates", [])
+            if coords:
+                track = gpxpy.gpx.GPXTrack()
+                track.name = gpx.name
+                gpx.tracks.append(track)
+                segment = gpxpy.gpx.GPXTrackSegment()
+                track.segments.append(segment)
+                for coord in coords:
+                    lon, lat = coord[0], coord[1]
+                    segment.points.append(gpxpy.gpx.GPXTrackPoint(latitude=lat, longitude=lon))
+                logger.info("GPX track: %d points from stored geometry", len(segment.points))
         except Exception as exc:
             logger.warning("Failed to load route geometry for GPX track: %s", exc)
 
