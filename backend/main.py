@@ -10,6 +10,7 @@ API docs available at:
 
 import logging
 import sys
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -44,31 +45,34 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables ready.")
 
-    # Warm the graph cache for every subregion that has data in graph_edges.
-    # This pre-loads the NetworkX graphs at startup so the first /api/generate
-    # request is fast instead of hitting a 10-20s cold-load delay.
-    with Session(engine) as db:
-        subregions = db.execute(select(distinct(Edge.subregion))).scalars().all()
-    subregions = list(subregions)
-    for subregion in subregions:
-        logger.info("Warming graph cache for '%s'...", subregion)
-        with Session(engine) as db:
-            try:
-                load_graph(subregion, db)
-                logger.info("Graph '%s' ready.", subregion)
-            except Exception as exc:
-                logger.warning("Graph warmup failed for '%s': %s", subregion, exc)
+    # Warm graphs in a background thread so the health check responds immediately.
+    # Railway's health check fires within seconds of startup — we can't block it.
+    def _warm_graphs():
+        try:
+            with Session(engine) as db:
+                subregions = db.execute(select(distinct(Edge.subregion))).scalars().all()
+            subregions = list(subregions)
+            for subregion in subregions:
+                logger.info("Warming graph cache for '%s'...", subregion)
+                with Session(engine) as db:
+                    try:
+                        load_graph(subregion, db)
+                        logger.info("Graph '%s' ready.", subregion)
+                    except Exception as exc:
+                        logger.warning("Graph warmup failed for '%s': %s", subregion, exc)
+            if len(subregions) > 1:
+                logger.info("Warming merged supergraph for %s...", subregions)
+                with Session(engine) as db:
+                    try:
+                        load_merged_graph(subregions, db)
+                        logger.info("Merged supergraph ready.")
+                    except Exception as exc:
+                        logger.warning("Merged graph warmup failed: %s", exc)
+        except Exception as exc:
+            logger.warning("Graph warmup thread failed: %s", exc)
 
-    # Pre-warm the merged supergraph so cross-subregion trips don't pay the
-    # compose cost on the first request.
-    if len(subregions) > 1:
-        logger.info("Warming merged supergraph for %s...", subregions)
-        with Session(engine) as db:
-            try:
-                load_merged_graph(subregions, db)
-                logger.info("Merged supergraph ready.")
-            except Exception as exc:
-                logger.warning("Merged graph warmup failed: %s", exc)
+    threading.Thread(target=_warm_graphs, daemon=True).start()
+    logger.info("Graph warmup started in background — health check is live.")
 
     yield
 
