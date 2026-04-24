@@ -150,7 +150,7 @@ export default function RouteMap({
 
     let cancelled = false;
 
-    fetch("https://tiles.openfreemap.org/styles/bright")
+    fetch("https://demotiles.maplibre.org/style.json")
       .then((r) => r.json())
       .then((style) => {
         if (cancelled || !mapContainer.current) return;
