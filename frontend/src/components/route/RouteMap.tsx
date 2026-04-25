@@ -163,7 +163,12 @@ export default function RouteMap({
         });
         map.addControl(new mlgl.NavigationControl(), "top-right");
         map.addControl(new mlgl.AttributionControl({ compact: true }), "bottom-right");
-        map.on("load", () => setMapReady(true));
+        map.on("load", () => {
+          map.resize();
+          setMapReady(true);
+        });
+        // Force resize after a tick in case container was 0-width during Framer Motion transition
+        setTimeout(() => map.resize(), 100);
         mapRef.current = map;
       });
 
