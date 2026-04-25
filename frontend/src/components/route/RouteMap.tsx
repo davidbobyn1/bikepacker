@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useEffect, useRef, useCallback, useMemo, useState } from "react";
+import maplibregl from "maplibre-gl";
 /**
  * RouteMap.tsx — MapLibre GL powered route map
  *
@@ -126,10 +127,9 @@ export default function RouteMap({
   className = "",
 }: RouteMapProps) {
   const mapContainer = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<InstanceType<typeof import("maplibre-gl").Map> | null>(null);
-  const markersRef = useRef<Array<InstanceType<typeof import("maplibre-gl").Marker>>>([]);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  const markersRef = useRef<maplibregl.Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
-  const [mlgl, setMlgl] = useState<typeof import("maplibre-gl") | null>(null);
 
   // Normalise: support both single-route (legacy) and multi-route modes
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,18 +137,11 @@ export default function RouteMap({
   const effectiveActiveId = activeRouteId ?? routes[0]?.id ?? null;
   const activeRoute = routes.find((r) => r.id === effectiveActiveId) ?? routes[0] ?? null;
 
-  // Load MapLibre dynamically
+  // Initialise map
   useEffect(() => {
-    import("maplibre-gl").then((mod) => {
-      setMlgl(mod);
-    });
-  }, []);
+    if (!mapContainer.current || mapRef.current) return;
 
-  // Initialise map once MapLibre is loaded
-  useEffect(() => {
-    if (!mlgl || !mapContainer.current || mapRef.current) return;
-
-    const map = new mlgl.Map({
+    const map = new maplibregl.Map({
       container: mapContainer.current,
       style: "https://tiles.openfreemap.org/styles/bright",
       center: [-122.59, 37.99],
@@ -156,8 +149,8 @@ export default function RouteMap({
       attributionControl: false,
     });
 
-    map.addControl(new mlgl.NavigationControl(), "top-right");
-    map.addControl(new mlgl.AttributionControl({ compact: true }), "bottom-right");
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
     map.on("load", () => {
       map.resize();
       setMapReady(true);
@@ -187,11 +180,11 @@ export default function RouteMap({
       mapRef.current = null;
       setMapReady(false);
     };
-  }, [mlgl]);
+  }, []);
 
   // Draw routes whenever data or mode changes
   useEffect(() => {
-    if (!mapReady || !mapRef.current || !mlgl) return;
+    if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
 
     // Clear old markers
@@ -272,8 +265,8 @@ export default function RouteMap({
         const [sLon, sLat] = coordinates[0];
         const [fLon, fLat] = coordinates[coordinates.length - 1];
         markersRef.current.push(
-          new mlgl!.Marker({ element: makeEndEl("S", "#16a34a") }).setLngLat([sLon, sLat]).addTo(map),
-          new mlgl!.Marker({ element: makeEndEl("F", "#dc2626") }).setLngLat([fLon, fLat]).addTo(map),
+          new maplibregl.Marker({ element: makeEndEl("S", "#16a34a") }).setLngLat([sLon, sLat]).addTo(map),
+          new maplibregl.Marker({ element: makeEndEl("F", "#dc2626") }).setLngLat([fLon, fLat]).addTo(map),
         );
       }
 
@@ -285,10 +278,10 @@ export default function RouteMap({
           const el = document.createElement("div");
           el.style.cssText = `background:#1e293b;border:2px solid ${colors.line};border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.45);cursor:pointer;`;
           el.textContent = "🏕";
-          const popup = new mlgl!.Popup({ offset: 16, closeButton: false })
+          const popup = new maplibregl.Popup({ offset: 16, closeButton: false })
             .setHTML(`<div style="font-size:12px;padding:4px 2px"><strong>Night ${i + 1}</strong><br/>${area.name}</div>`);
           markersRef.current.push(
-            new mlgl!.Marker({ element: el }).setLngLat([lon, lat]).setPopup(popup).addTo(map),
+            new maplibregl.Marker({ element: el }).setLngLat([lon, lat]).setPopup(popup).addTo(map),
           );
         });
       }
@@ -303,7 +296,7 @@ export default function RouteMap({
         { padding: { top: 50, bottom: 90, left: 40, right: 40 }, duration: 700 },
       );
     }
-  }, [mapReady, mlgl, routes, effectiveActiveId, compareMode, onRouteClick, activeRoute]);
+  }, [mapReady, routes, effectiveActiveId, compareMode, onRouteClick, activeRoute]);
 
   const flyTo = useCallback(([lat, lon]: [number, number]) => {
     mapRef.current?.flyTo({ center: [lon, lat], zoom: 13, duration: 600 });
