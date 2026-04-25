@@ -1,58 +1,53 @@
 import React, { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import maplibregl from "maplibre-gl";
 
+import type { RouteOption } from "../../types/route";
+
 /**
  * RouteMap.tsx — MapLibre GL powered route map
  *
- * Uses Mapbox outdoor tiles when REACT_APP_MAPBOX_TOKEN is set (recommended),
- * falls back to OpenFreeMap for local dev without a token.
+ * Uses an inline raster-tile style backed by OpenStreetMap tiles.
+ * This is intentionally the simplest possible setup:
+ *   - No external style.json (no Mapbox / Stadia validation issues)
+ *   - No mapbox:// protocol (no transformRequest gymnastics)
+ *   - No async fetches in useEffect (no TS build failures)
  *
- * Worker fix: CRA/webpack cannot bundle MapLibre's tile worker via blob URL.
- * We point workerUrl at the matching CDN version so the worker loads correctly
- * in both dev and production builds.
+ * The CDN workerUrl assignment below fixes CRA/webpack's broken handling
+ * of MapLibre's tile worker — without it, tiles never decode in production.
  */
 
-import type { RouteOption } from "../../types/route";
-
-// ─── Worker fix (must happen before any Map is created) ──────────────────────
-// CRA's webpack production build cannot follow MapLibre's dynamic worker
-// blob URL. Pointing at the CDN version of the worker for the same release
-// guarantees the tile-processing worker loads correctly everywhere.
+// ─── Worker fix (must run before any Map is created) ─────────────────────────
 (maplibregl as any).workerUrl =
   "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl-csp-worker.js";
 
-// ─── Tile source ──────────────────────────────────────────────────────────────
-const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN || "";
+// ─── Inline style (raster OSM tiles, no auth required) ───────────────────────
+const RASTER_STYLE: any = {
+  version: 8,
+  sources: {
+    "osm-tiles": {
+      type: "raster",
+      tiles: [
+        "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+      ],
+      tileSize: 256,
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxzoom: 19,
+    },
+  },
+  layers: [
+    {
+      id: "osm-tiles",
+      type: "raster",
+      source: "osm-tiles",
+      minzoom: 0,
+      maxzoom: 22,
+    },
+  ],
+};
 
-/** Rewrites mapbox:// protocol URLs to Mapbox REST API calls with the token. */
-function mapboxTransformRequest(
-  url: string
-): { url: string } {
-  if (!url.startsWith("mapbox://")) return { url };
-  const token = MAPBOX_TOKEN;
-  const append = (u: string) =>
-    `${u}${u.includes("?") ? "&" : "?"}access_token=${token}`;
-
-  if (url.startsWith("mapbox://tiles/")) {
-    return { url: append(url.replace("mapbox://tiles/", "https://api.mapbox.com/v4/")) };
-  }
-  if (url.startsWith("mapbox://fonts/")) {
-    return { url: append(url.replace("mapbox://fonts/", "https://api.mapbox.com/fonts/v1/")) };
-  }
-  if (url.startsWith("mapbox://sprites/")) {
-    return { url: append(url.replace("mapbox://sprites/", "https://api.mapbox.com/sprites/v1/")) };
-  }
-  // Generic mapbox://<tileset-id> source descriptor
-  const id = url.replace("mapbox://", "");
-  return { url: append(`https://api.mapbox.com/v4/${id}.json`) + "&secure" };
-}
-
-const MAPBOX_STYLE_URL = MAPBOX_TOKEN
-  ? `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12?access_token=${MAPBOX_TOKEN}`
-  : null;
-const FALLBACK_STYLE = "https://tiles.openfreemap.org/styles/bright";
-
-// ─── Archetype colours ────────────────────────────────────────────────────────
+// ─── Component types ─────────────────────────────────────────────────────────
 interface RouteMapProps {
   route?: RouteOption;
   routes?: RouteOption[];
@@ -69,7 +64,7 @@ const ARCHETYPE_COLORS: Record<string, { line: string; glow: string }> = {
 };
 const INACTIVE_COLOR = "#94a3b8";
 
-// ─── Elevation profile strip ──────────────────────────────────────────────────
+// ─── Elevation profile strip ─────────────────────────────────────────────────
 function ElevationProfile({
   route,
   onPositionClick,
@@ -144,7 +139,7 @@ function ElevationProfile({
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main component ──────────────────────────────────────────────────────────
 export default function RouteMap({
   route: singleRoute,
   routes: multiRoutes,
@@ -166,95 +161,61 @@ export default function RouteMap({
   const effectiveActiveId = activeRouteId ?? routes[0]?.id ?? null;
   const activeRoute = routes.find((r) => r.id === effectiveActiveId) ?? routes[0] ?? null;
 
-  // ── Initialise map ──────────────────────────────────────────────────────────
+  // ── Initialise map (synchronous — no async, no fetch) ──────────────────────
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
-    let cancelled = false;
-    let map: maplibregl.Map | null = null;
-    let ro: ResizeObserver | null = null;
-    let t1: ReturnType<typeof setTimeout>, t2: ReturnType<typeof setTimeout>, t3: ReturnType<typeof setTimeout>;
+    const map = new maplibregl.Map({
+      container: mapContainer.current,
+      style: RASTER_STYLE,
+      center: [-122.59, 37.99],
+      zoom: 10,
+      attributionControl: false,
+    });
 
-    const init = async () => {
-      // Resolve style: fetch Mapbox style and strip the root "name" field that
-      // MapLibre's strict validator rejects, falling back to OpenFreeMap.
-      let style: string | object = FALLBACK_STYLE;
-      if (MAPBOX_STYLE_URL) {
-        try {
-          const resp = await fetch(MAPBOX_STYLE_URL);
-          const json = await resp.json();
-          delete json.name; // MapLibre v4 rejects this Mapbox-specific property
-          style = json;
-        } catch {
-          // stay with fallback
-        }
-      }
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    map.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      "bottom-right"
+    );
 
-      if (cancelled || !mapContainer.current) return;
+    map.on("load", () => {
+      map.resize();
+      setMapReady(true);
+    });
 
-      map = new maplibregl.Map({
-        container: mapContainer.current,
-        style,
-        center: [-122.59, 37.99],
-        zoom: 10,
-        attributionControl: false,
-        ...(MAPBOX_TOKEN
-          ? { transformRequest: mapboxTransformRequest as any }
-          : {}),
-      });
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(mapContainer.current);
 
-      map.addControl(new maplibregl.NavigationControl(), "top-right");
-      map.addControl(
-        new maplibregl.AttributionControl({ compact: true }),
-        "bottom-right"
-      );
+    const t1 = setTimeout(() => map.resize(), 100);
+    const t2 = setTimeout(() => map.resize(), 500);
+    const t3 = setTimeout(() => map.resize(), 1000);
 
-      map.on("load", () => {
-        map!.resize();
-        setMapReady(true);
-      });
+    const onResize = () => map.resize();
+    window.addEventListener("resize", onResize);
 
-      // Force resize whenever the container dimensions change (Framer Motion fade-in)
-      ro = new ResizeObserver(() => map!.resize());
-      ro.observe(mapContainer.current!);
-
-      // Belt-and-suspenders resize calls to catch animation end
-      t1 = setTimeout(() => map!.resize(), 100);
-      t2 = setTimeout(() => map!.resize(), 500);
-      t3 = setTimeout(() => map!.resize(), 1000);
-
-      const onResize = () => map!.resize();
-      window.addEventListener("resize", onResize);
-
-      mapRef.current = map;
-    };
-
-    init();
+    mapRef.current = map;
 
     return () => {
-      cancelled = true;
-      ro?.disconnect();
+      ro.disconnect();
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
-      if (map) {
-        map.remove();
-        mapRef.current = null;
-        setMapReady(false);
-      }
+      window.removeEventListener("resize", onResize);
+      map.remove();
+      mapRef.current = null;
+      setMapReady(false);
     };
   }, []);
 
-  // ── Draw / redraw routes ────────────────────────────────────────────────────
+  // ── Draw / redraw routes ───────────────────────────────────────────────────
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
 
-    // Remove old markers
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Remove old layers + sources
     const style = map.getStyle();
     (style?.layers ?? []).forEach((layer) => {
       if (layer.id.startsWith("bp-route-")) map.removeLayer(layer.id);
@@ -275,7 +236,6 @@ export default function RouteMap({
       const lineWidth = isActive ? 4 : 2;
       const opacity = compareMode && !isActive ? 0.45 : 1;
 
-      // GeoJSON expects [lon, lat]
       const coordinates = route.geometry.map(([lat, lon]) => [lon, lat]);
       const sourceId = `bp-route-${route.id}`;
 
@@ -288,7 +248,6 @@ export default function RouteMap({
         },
       });
 
-      // Glow layer
       map.addLayer({
         id: `bp-route-glow-${route.id}`,
         type: "line",
@@ -302,7 +261,6 @@ export default function RouteMap({
         },
       });
 
-      // Main line
       map.addLayer({
         id: `bp-route-line-${route.id}`,
         type: "line",
@@ -325,7 +283,6 @@ export default function RouteMap({
         map.getCanvas().style.cursor = "";
       });
 
-      // Start / Finish markers
       if (isActive && coordinates.length >= 2) {
         const makeEndEl = (label: string, bg: string) => {
           const el = document.createElement("div");
@@ -345,7 +302,6 @@ export default function RouteMap({
         );
       }
 
-      // Overnight markers
       if (isActive || !compareMode) {
         route.overnight_areas?.forEach((area, i) => {
           const [lat, lon] = area.coordinates;
@@ -366,7 +322,6 @@ export default function RouteMap({
       }
     });
 
-    // Fit bounds to active route
     if (activeRoute?.geometry?.length) {
       const lons = activeRoute.geometry.map(([, lon]) => lon);
       const lats = activeRoute.geometry.map(([lat]) => lat);
