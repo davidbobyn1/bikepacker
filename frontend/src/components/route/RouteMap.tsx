@@ -148,37 +148,27 @@ export default function RouteMap({
   useEffect(() => {
     if (!mlgl || !mapContainer.current || mapRef.current) return;
 
-    let cancelled = false;
+    const map = new mlgl.Map({
+      container: mapContainer.current,
+      style: "https://tiles.openfreemap.org/styles/bright",
+      center: [-122.59, 37.99],
+      zoom: 10,
+      attributionControl: false,
+    });
 
-    fetch("https://demotiles.maplibre.org/style.json")
-      .then((r) => r.json())
-      .then((style) => {
-        if (cancelled || !mapContainer.current) return;
-        const map = new mlgl.Map({
-          container: mapContainer.current,
-          style,
-          center: [-122.59, 37.99],
-          zoom: 10,
-          attributionControl: false,
-        });
-        map.addControl(new mlgl.NavigationControl(), "top-right");
-        map.addControl(new mlgl.AttributionControl({ compact: true }), "bottom-right");
-        map.on("load", () => {
-          map.resize();
-          setMapReady(true);
-        });
-        // Force resize after a tick in case container was 0-width during Framer Motion transition
-        setTimeout(() => map.resize(), 100);
-        mapRef.current = map;
-      });
+    map.addControl(new mlgl.NavigationControl(), "top-right");
+    map.addControl(new mlgl.AttributionControl({ compact: true }), "bottom-right");
+    map.on("load", () => {
+      map.resize();
+      setMapReady(true);
+    });
+    setTimeout(() => map.resize(), 150);
+    mapRef.current = map;
 
     return () => {
-      cancelled = true;
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-        setMapReady(false);
-      }
+      map.remove();
+      mapRef.current = null;
+      setMapReady(false);
     };
   }, [mlgl]);
 
