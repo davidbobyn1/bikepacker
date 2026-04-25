@@ -1,32 +1,60 @@
 import React, { useEffect, useRef, useCallback, useMemo, useState } from "react";
 import maplibregl from "maplibre-gl";
+
 /**
  * RouteMap.tsx — MapLibre GL powered route map
  *
- * Uses Mapbox's outdoor tiles (via MapLibre GL JS) for beautiful terrain rendering.
- * Features:
- *  - Full-bleed map with color-coded route polylines per archetype
- *  - Overnight stop markers with popups
- *  - "Compare Routes" mode: all options overlaid simultaneously
- *  - Interactive elevation profile pinned to the bottom — click to fly to location
- *  - Glow effect on active route for visual clarity
+ * Uses Mapbox outdoor tiles when REACT_APP_MAPBOX_TOKEN is set (recommended),
+ * falls back to OpenFreeMap for local dev without a token.
  *
- * Props:
- *  - routes: all route options to potentially draw
- *  - activeRouteId: which route is currently selected
- *  - compareMode: if true, draw all routes simultaneously
- *  - onRouteClick: called when user clicks a route line
- *  - mapboxToken: Mapbox public token (from VITE_MAPBOX_TOKEN)
- *  - className: optional CSS class for the container div
+ * Worker fix: CRA/webpack cannot bundle MapLibre's tile worker via blob URL.
+ * We point workerUrl at the matching CDN version so the worker loads correctly
+ * in both dev and production builds.
  */
 
 import type { RouteOption } from "../../types/route";
 
-// We load MapLibre dynamically to avoid SSR issues
+// ─── Worker fix (must happen before any Map is created) ──────────────────────
+// CRA's webpack production build cannot follow MapLibre's dynamic worker
+// blob URL. Pointing at the CDN version of the worker for the same release
+// guarantees the tile-processing worker loads correctly everywhere.
+(maplibregl as any).workerUrl =
+  "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl-csp-worker.js";
 
+// ─── Tile source ──────────────────────────────────────────────────────────────
+const MAPBOX_TOKEN = process.env.REACT_APP_MAPBOX_TOKEN || "";
+
+/** Rewrites mapbox:// protocol URLs to Mapbox REST API calls with the token. */
+function mapboxTransformRequest(
+  url: string
+): { url: string } {
+  if (!url.startsWith("mapbox://")) return { url };
+  const token = MAPBOX_TOKEN;
+  const append = (u: string) =>
+    `${u}${u.includes("?") ? "&" : "?"}access_token=${token}`;
+
+  if (url.startsWith("mapbox://tiles/")) {
+    return { url: append(url.replace("mapbox://tiles/", "https://api.mapbox.com/v4/")) };
+  }
+  if (url.startsWith("mapbox://fonts/")) {
+    return { url: append(url.replace("mapbox://fonts/", "https://api.mapbox.com/fonts/v1/")) };
+  }
+  if (url.startsWith("mapbox://sprites/")) {
+    return { url: append(url.replace("mapbox://sprites/", "https://api.mapbox.com/sprites/v1/")) };
+  }
+  // Generic mapbox://<tileset-id> source descriptor
+  const id = url.replace("mapbox://", "");
+  return { url: append(`https://api.mapbox.com/v4/${id}.json`) + "&secure" };
+}
+
+const MAP_STYLE = MAPBOX_TOKEN
+  ? `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12?access_token=${MAPBOX_TOKEN}`
+  : "https://tiles.openfreemap.org/styles/bright";
+
+// ─── Archetype colours ────────────────────────────────────────────────────────
 interface RouteMapProps {
-  route?: RouteOption;           // single-route mode (legacy compat)
-  routes?: RouteOption[];        // multi-route mode
+  route?: RouteOption;
+  routes?: RouteOption[];
   activeRouteId?: string | null;
   compareMode?: boolean;
   onRouteClick?: (routeId: string) => void;
@@ -40,10 +68,7 @@ const ARCHETYPE_COLORS: Record<string, { line: string; glow: string }> = {
 };
 const INACTIVE_COLOR = "#94a3b8";
 
-// ---------------------------------------------------------------------------
-// Elevation Profile Strip
-// ---------------------------------------------------------------------------
-
+// ─── Elevation profile strip ──────────────────────────────────────────────────
 function ElevationProfile({
   route,
   onPositionClick,
@@ -57,7 +82,6 @@ function ElevationProfile({
   const n = points.length;
   const totalClimb = route.total_climbing_m || 500;
 
-  // Simulate elevation profile shape from climbing data
   const heights = points.map((_, i) => {
     const t = i / n;
     return (
@@ -92,13 +116,18 @@ function ElevationProfile({
   };
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 bg-gray-950/90 backdrop-blur-sm border-t border-gray-800 z-10" style={{ height: 80 }}>
+    <div
+      className="absolute bottom-0 left-0 right-0 bg-gray-950/90 backdrop-blur-sm border-t border-gray-800 z-10"
+      style={{ height: 80 }}
+    >
       <div className="flex items-center px-3 pt-1 gap-3">
         <span className="text-xs text-gray-400 font-medium">Elevation</span>
         <span className="text-xs text-gray-600">
           {route.total_distance_km.toFixed(0)} km · {route.total_climbing_m.toFixed(0)} m ↑
         </span>
-        <span className="text-xs text-gray-700 ml-auto hidden sm:block">Click to fly to location</span>
+        <span className="text-xs text-gray-700 ml-auto hidden sm:block">
+          Click to fly to location
+        </span>
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -114,10 +143,7 @@ function ElevationProfile({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function RouteMap({
   route: singleRoute,
   routes: multiRoutes,
@@ -131,67 +157,76 @@ export default function RouteMap({
   const markersRef = useRef<maplibregl.Marker[]>([]);
   const [mapReady, setMapReady] = useState(false);
 
-  // Normalise: support both single-route (legacy) and multi-route modes
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const routes: RouteOption[] = useMemo(() => multiRoutes ?? (singleRoute ? [singleRoute] : []), [multiRoutes, singleRoute]);
+  const routes: RouteOption[] = useMemo(
+    () => multiRoutes ?? (singleRoute ? [singleRoute] : []),
+    [multiRoutes, singleRoute]
+  );
   const effectiveActiveId = activeRouteId ?? routes[0]?.id ?? null;
   const activeRoute = routes.find((r) => r.id === effectiveActiveId) ?? routes[0] ?? null;
 
-  // Initialise map
+  // ── Initialise map ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: "https://tiles.openfreemap.org/styles/bright",
+      style: MAP_STYLE,
       center: [-122.59, 37.99],
       zoom: 10,
       attributionControl: false,
+      ...(MAPBOX_TOKEN
+        ? { transformRequest: mapboxTransformRequest as any }
+        : {}),
     });
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+    map.addControl(
+      new maplibregl.AttributionControl({ compact: true }),
+      "bottom-right"
+    );
+
     map.on("load", () => {
       map.resize();
       setMapReady(true);
     });
 
-    // ResizeObserver forces a resize whenever the container changes size
-    // (e.g. after Framer Motion opacity animation completes and layout is recalculated)
-    const ro = new ResizeObserver(() => { map.resize(); });
-    if (mapContainer.current) ro.observe(mapContainer.current);
+    // Force resize whenever the container dimensions change (Framer Motion fade-in)
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(mapContainer.current!);
 
-    // Also fire multiple delayed resizes to catch animation end
+    // Belt-and-suspenders resize calls to catch animation end
     const t1 = setTimeout(() => map.resize(), 100);
-    const t2 = setTimeout(() => map.resize(), 400);
-    const t3 = setTimeout(() => map.resize(), 800);
+    const t2 = setTimeout(() => map.resize(), 500);
+    const t3 = setTimeout(() => map.resize(), 1000);
 
-    // Listen for window resize events (dispatched by Index.tsx after Framer Motion completes)
-    const onWindowResize = () => map.resize();
-    window.addEventListener("resize", onWindowResize);
+    const onResize = () => map.resize();
+    window.addEventListener("resize", onResize);
 
     mapRef.current = map;
 
     return () => {
       ro.disconnect();
-      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
-      window.removeEventListener("resize", onWindowResize);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      window.removeEventListener("resize", onResize);
       map.remove();
       mapRef.current = null;
       setMapReady(false);
     };
   }, []);
 
-  // Draw routes whenever data or mode changes
+  // ── Draw / redraw routes ────────────────────────────────────────────────────
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
     const map = mapRef.current;
 
-    // Clear old markers
+    // Remove old markers
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
 
-    // Remove old route layers/sources
+    // Remove old layers + sources
     const style = map.getStyle();
     (style?.layers ?? []).forEach((layer) => {
       if (layer.id.startsWith("bp-route-")) map.removeLayer(layer.id);
@@ -200,7 +235,9 @@ export default function RouteMap({
       if (id.startsWith("bp-route-")) map.removeSource(id);
     });
 
-    const toDraw = compareMode ? routes : routes.filter((r) => r.id === effectiveActiveId);
+    const toDraw = compareMode
+      ? routes
+      : routes.filter((r) => r.id === effectiveActiveId);
 
     toDraw.forEach((route) => {
       if (!route.geometry?.length) return;
@@ -223,7 +260,7 @@ export default function RouteMap({
         },
       });
 
-      // Glow
+      // Glow layer
       map.addLayer({
         id: `bp-route-glow-${route.id}`,
         type: "line",
@@ -250,11 +287,17 @@ export default function RouteMap({
         },
       });
 
-      map.on("click", `bp-route-line-${route.id}`, () => onRouteClick?.(route.id));
-      map.on("mouseenter", `bp-route-line-${route.id}`, () => { map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", `bp-route-line-${route.id}`, () => { map.getCanvas().style.cursor = ""; });
+      map.on("click", `bp-route-line-${route.id}`, () =>
+        onRouteClick?.(route.id)
+      );
+      map.on("mouseenter", `bp-route-line-${route.id}`, () => {
+        map.getCanvas().style.cursor = "pointer";
+      });
+      map.on("mouseleave", `bp-route-line-${route.id}`, () => {
+        map.getCanvas().style.cursor = "";
+      });
 
-      // Start / Finish markers for active route
+      // Start / Finish markers
       if (isActive && coordinates.length >= 2) {
         const makeEndEl = (label: string, bg: string) => {
           const el = document.createElement("div");
@@ -265,8 +308,12 @@ export default function RouteMap({
         const [sLon, sLat] = coordinates[0];
         const [fLon, fLat] = coordinates[coordinates.length - 1];
         markersRef.current.push(
-          new maplibregl.Marker({ element: makeEndEl("S", "#16a34a") }).setLngLat([sLon, sLat]).addTo(map),
-          new maplibregl.Marker({ element: makeEndEl("F", "#dc2626") }).setLngLat([fLon, fLat]).addTo(map),
+          new maplibregl.Marker({ element: makeEndEl("S", "#16a34a") })
+            .setLngLat([sLon, sLat])
+            .addTo(map),
+          new maplibregl.Marker({ element: makeEndEl("F", "#dc2626") })
+            .setLngLat([fLon, fLat])
+            .addTo(map)
         );
       }
 
@@ -278,10 +325,14 @@ export default function RouteMap({
           const el = document.createElement("div");
           el.style.cssText = `background:#1e293b;border:2px solid ${colors.line};border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.45);cursor:pointer;`;
           el.textContent = "🏕";
-          const popup = new maplibregl.Popup({ offset: 16, closeButton: false })
-            .setHTML(`<div style="font-size:12px;padding:4px 2px"><strong>Night ${i + 1}</strong><br/>${area.name}</div>`);
+          const popup = new maplibregl.Popup({ offset: 16, closeButton: false }).setHTML(
+            `<div style="font-size:12px;padding:4px 2px"><strong>Night ${i + 1}</strong><br/>${area.name}</div>`
+          );
           markersRef.current.push(
-            new maplibregl.Marker({ element: el }).setLngLat([lon, lat]).setPopup(popup).addTo(map),
+            new maplibregl.Marker({ element: el })
+              .setLngLat([lon, lat])
+              .setPopup(popup)
+              .addTo(map)
           );
         });
       }
@@ -292,8 +343,11 @@ export default function RouteMap({
       const lons = activeRoute.geometry.map(([, lon]) => lon);
       const lats = activeRoute.geometry.map(([lat]) => lat);
       map.fitBounds(
-        [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
-        { padding: { top: 50, bottom: 90, left: 40, right: 40 }, duration: 700 },
+        [
+          [Math.min(...lons), Math.min(...lats)],
+          [Math.max(...lons), Math.max(...lats)],
+        ],
+        { padding: { top: 50, bottom: 90, left: 40, right: 40 }, duration: 700 }
       );
     }
   }, [mapReady, routes, effectiveActiveId, compareMode, onRouteClick, activeRoute]);
@@ -303,9 +357,14 @@ export default function RouteMap({
   }, []);
 
   return (
-    <div className={`relative overflow-hidden rounded-xl ${className}`} style={{ minHeight: 400 }}>
+    <div
+      className={`relative overflow-hidden rounded-xl ${className}`}
+      style={{ minHeight: 400 }}
+    >
       <div ref={mapContainer} className="absolute inset-0" />
-      {mapReady && <ElevationProfile route={activeRoute} onPositionClick={flyTo} />}
+      {mapReady && (
+        <ElevationProfile route={activeRoute} onPositionClick={flyTo} />
+      )}
     </div>
   );
 }
