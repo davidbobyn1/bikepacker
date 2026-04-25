@@ -217,7 +217,16 @@ export default function Index() {
 
           {/* DETAIL */}
           {view === "detail" && selectedRoute && (
-            <motion.div key="detail" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div
+              key="detail"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onAnimationComplete={() => {
+                // Force MapLibre to recalculate canvas size after fade-in animation
+                window.dispatchEvent(new Event("resize"));
+              }}
+            >
               <RouteDetail route={selectedRoute} onBack={() => { setView("results"); setSelectedRoute(null); }} />
             </motion.div>
           )}

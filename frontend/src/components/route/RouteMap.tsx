@@ -162,10 +162,27 @@ export default function RouteMap({
       map.resize();
       setMapReady(true);
     });
-    setTimeout(() => map.resize(), 150);
+
+    // ResizeObserver forces a resize whenever the container changes size
+    // (e.g. after Framer Motion opacity animation completes and layout is recalculated)
+    const ro = new ResizeObserver(() => { map.resize(); });
+    if (mapContainer.current) ro.observe(mapContainer.current);
+
+    // Also fire multiple delayed resizes to catch animation end
+    const t1 = setTimeout(() => map.resize(), 100);
+    const t2 = setTimeout(() => map.resize(), 400);
+    const t3 = setTimeout(() => map.resize(), 800);
+
+    // Listen for window resize events (dispatched by Index.tsx after Framer Motion completes)
+    const onWindowResize = () => map.resize();
+    window.addEventListener("resize", onWindowResize);
+
     mapRef.current = map;
 
     return () => {
+      ro.disconnect();
+      clearTimeout(t1); clearTimeout(t2); clearTimeout(t3);
+      window.removeEventListener("resize", onWindowResize);
       map.remove();
       mapRef.current = null;
       setMapReady(false);
