@@ -47,9 +47,10 @@ function mapboxTransformRequest(
   return { url: append(`https://api.mapbox.com/v4/${id}.json`) + "&secure" };
 }
 
-const MAP_STYLE = MAPBOX_TOKEN
+const MAPBOX_STYLE_URL = MAPBOX_TOKEN
   ? `https://api.mapbox.com/styles/v1/mapbox/outdoors-v12?access_token=${MAPBOX_TOKEN}`
-  : "https://tiles.openfreemap.org/styles/bright";
+  : null;
+const FALLBACK_STYLE = "https://tiles.openfreemap.org/styles/bright";
 
 // ─── Archetype colours ────────────────────────────────────────────────────────
 interface RouteMapProps {
@@ -169,51 +170,78 @@ export default function RouteMap({
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
-    const map = new maplibregl.Map({
-      container: mapContainer.current,
-      style: MAP_STYLE,
-      center: [-122.59, 37.99],
-      zoom: 10,
-      attributionControl: false,
-      ...(MAPBOX_TOKEN
-        ? { transformRequest: mapboxTransformRequest as any }
-        : {}),
-    });
+    let cancelled = false;
+    let map: maplibregl.Map | null = null;
+    let ro: ResizeObserver | null = null;
+    let t1: ReturnType<typeof setTimeout>, t2: ReturnType<typeof setTimeout>, t3: ReturnType<typeof setTimeout>;
 
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
-    map.addControl(
-      new maplibregl.AttributionControl({ compact: true }),
-      "bottom-right"
-    );
+    const init = async () => {
+      // Resolve style: fetch Mapbox style and strip the root "name" field that
+      // MapLibre's strict validator rejects, falling back to OpenFreeMap.
+      let style: string | object = FALLBACK_STYLE;
+      if (MAPBOX_STYLE_URL) {
+        try {
+          const resp = await fetch(MAPBOX_STYLE_URL);
+          const json = await resp.json();
+          delete json.name; // MapLibre v4 rejects this Mapbox-specific property
+          style = json;
+        } catch {
+          // stay with fallback
+        }
+      }
 
-    map.on("load", () => {
-      map.resize();
-      setMapReady(true);
-    });
+      if (cancelled || !mapContainer.current) return;
 
-    // Force resize whenever the container dimensions change (Framer Motion fade-in)
-    const ro = new ResizeObserver(() => map.resize());
-    ro.observe(mapContainer.current!);
+      map = new maplibregl.Map({
+        container: mapContainer.current,
+        style,
+        center: [-122.59, 37.99],
+        zoom: 10,
+        attributionControl: false,
+        ...(MAPBOX_TOKEN
+          ? { transformRequest: mapboxTransformRequest as any }
+          : {}),
+      });
 
-    // Belt-and-suspenders resize calls to catch animation end
-    const t1 = setTimeout(() => map.resize(), 100);
-    const t2 = setTimeout(() => map.resize(), 500);
-    const t3 = setTimeout(() => map.resize(), 1000);
+      map.addControl(new maplibregl.NavigationControl(), "top-right");
+      map.addControl(
+        new maplibregl.AttributionControl({ compact: true }),
+        "bottom-right"
+      );
 
-    const onResize = () => map.resize();
-    window.addEventListener("resize", onResize);
+      map.on("load", () => {
+        map!.resize();
+        setMapReady(true);
+      });
 
-    mapRef.current = map;
+      // Force resize whenever the container dimensions change (Framer Motion fade-in)
+      ro = new ResizeObserver(() => map!.resize());
+      ro.observe(mapContainer.current!);
+
+      // Belt-and-suspenders resize calls to catch animation end
+      t1 = setTimeout(() => map!.resize(), 100);
+      t2 = setTimeout(() => map!.resize(), 500);
+      t3 = setTimeout(() => map!.resize(), 1000);
+
+      const onResize = () => map!.resize();
+      window.addEventListener("resize", onResize);
+
+      mapRef.current = map;
+    };
+
+    init();
 
     return () => {
-      ro.disconnect();
+      cancelled = true;
+      ro?.disconnect();
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
-      window.removeEventListener("resize", onResize);
-      map.remove();
-      mapRef.current = null;
-      setMapReady(false);
+      if (map) {
+        map.remove();
+        mapRef.current = null;
+        setMapReady(false);
+      }
     };
   }, []);
 
