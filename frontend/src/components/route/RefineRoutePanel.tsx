@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles, Send, Loader2, RotateCcw, Check } from "lucide-react";
 import type { RouteOption } from "../../types/route";
+import { api } from "../../services/api";
 
 interface RefineRoutePanelProps {
   route: RouteOption;
@@ -40,14 +41,31 @@ export default function RefineRoutePanel({ route, onApplyRefinement }: RefineRou
     setInput("");
     setIsThinking(true);
 
-    // TODO: replace with POST /api/refine when backend endpoint is ready
-    // Body: { route_id, instruction, conversation_history: {role, content}[] }
-    // Returns: { reasoning: string, proposed_changes: string[], updated_route?: RouteOption }
-    setTimeout(() => {
-      const reply = mockReply(text, route);
-      setMessages((m) => [...m, reply]);
-      setIsThinking(false);
-    }, 1100);
+    // Build conversation history for context
+    const history = messages.map((m) => ({ role: m.role, content: m.text }));
+
+    api.refineRoute(route, text.trim(), history)
+      .then((data) => {
+        const changes = data.proposed_changes.map(
+          (c) => `${c.description} — ${c.impact}`
+        );
+        const reply: RefinementMessage = {
+          id: `a-${Date.now()}`,
+          role: "assistant",
+          text: data.reasoning + (data.follow_up_prompt ? `\n\n${data.follow_up_prompt}` : ""),
+          proposedChanges: changes,
+          status: "pending",
+        };
+        setMessages((m) => [...m, reply]);
+      })
+      .catch(() => {
+        // Fallback to mock on network error
+        const reply = mockReply(text, route);
+        setMessages((m) => [...m, reply]);
+      })
+      .finally(() => {
+        setIsThinking(false);
+      });
   };
 
   const apply = (id: string) => {

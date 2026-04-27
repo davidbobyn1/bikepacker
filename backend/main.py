@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 
-from backend.api import parse, generate, generate_full, finalize, routes, gpx_inline, pois, rwgps_export, elevation
+from backend.api import parse, generate, generate_full, finalize, routes, gpx_inline, pois, rwgps_export, elevation, refine
 from backend.db.models import Base
 from backend.db.session import engine
 
@@ -101,6 +101,7 @@ app.include_router(gpx_inline.router, prefix="/api", tags=["gpx"])
 app.include_router(pois.router, prefix="/api", tags=["pois"])
 app.include_router(rwgps_export.router, prefix="/api", tags=["rwgps"])
 app.include_router(elevation.router, prefix="/api", tags=["elevation"])
+app.include_router(refine.router, prefix="/api", tags=["refine"])
 
 # ---------------------------------------------------------------------------
 # Health

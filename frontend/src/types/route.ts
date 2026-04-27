@@ -61,6 +61,15 @@ export interface ElevationPoint {
   elevation_m: number;
 }
 
+export type ResupplyConfidence = "verified" | "likely" | "unverified";
+
+export interface ResupplyPoint {
+  name: string;
+  /** km from the start of this day's segment — null if unknown */
+  distance_from_day_start_km: number | null;
+  confidence: ResupplyConfidence;
+}
+
 export interface DaySegment {
   day: number;
   title: string;
@@ -73,8 +82,8 @@ export interface DaySegment {
   highlights: string[];
   terrain_notes: TerrainNote[];
   overnight_area?: OvernightArea;
-  water_points: string[];
-  grocery_points: string[];
+  water_points: ResupplyPoint[];
+  grocery_points: ResupplyPoint[];
   // TODO: wire to real elevation API — currently synthesised from climbing_m + distance_km
   elevation_points?: ElevationPoint[];
 }

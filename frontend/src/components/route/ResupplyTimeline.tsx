@@ -235,27 +235,33 @@ function buildWaypoints(route: RouteOption): {
   route.day_segments.forEach((seg) => {
     const dayStartKm = cumulativeKm;
 
-    // Distribute water points evenly across the day
+    // Water points — use real distance_from_day_start_km if available, else distribute evenly
     seg.water_points.forEach((wp, i) => {
-      const pct = (i + 1) / (seg.water_points.length + 1);
+      const offsetKm = wp.distance_from_day_start_km != null
+        ? wp.distance_from_day_start_km
+        : seg.distance_km * ((i + 1) / (seg.water_points.length + 1));
+      const confidenceNote = wp.confidence === "verified" ? " (verified)" : wp.confidence === "unverified" ? " (unverified — check locally)" : "";
       waypoints.push({
-        km: Math.round(dayStartKm + seg.distance_km * pct),
+        km: Math.round(dayStartKm + offsetKm),
         day: seg.day,
-        label: wp,
+        label: wp.name,
         kind: "water",
-        detail: `Water source on day ${seg.day}`,
+        detail: `Water source on day ${seg.day}${confidenceNote}`,
       });
     });
 
-    // Distribute grocery points
+    // Grocery points — use real distance_from_day_start_km if available, else distribute evenly
     seg.grocery_points.forEach((gp, i) => {
-      const pct = (i + 1) / (seg.grocery_points.length + 1);
+      const offsetKm = gp.distance_from_day_start_km != null
+        ? gp.distance_from_day_start_km
+        : seg.distance_km * ((i + 1) / (seg.grocery_points.length + 1));
+      const confidenceNote = gp.confidence === "verified" ? " (verified)" : gp.confidence === "unverified" ? " (unverified — check locally)" : "";
       waypoints.push({
-        km: Math.round(dayStartKm + seg.distance_km * pct),
+        km: Math.round(dayStartKm + offsetKm),
         day: seg.day,
-        label: gp,
+        label: gp.name,
         kind: "grocery",
-        detail: `Resupply / food on day ${seg.day}`,
+        detail: `Resupply / food on day ${seg.day}${confidenceNote}`,
       });
     });
 

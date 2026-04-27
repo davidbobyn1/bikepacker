@@ -77,7 +77,13 @@ Return a JSON object with exactly these fields:
       "day": 1,
       "headline": "Short evocative headline for this day (e.g. 'Into the hills')",
       "narrative": "2-3 sentences describing what the rider will experience. Reference the actual distance, climbing, and surface data. Include one specific practical note (e.g. resupply, terrain warning, highlight).",
-      "key_advice": "One specific, actionable tip for this day"
+      "key_advice": "One specific, actionable tip for this day",
+      "water_points": [
+        {{"name": "Name of water source (creek, spring, tap, etc.)", "distance_from_day_start_km": 25.0, "confidence": "likely"}}
+      ],
+      "grocery_points": [
+        {{"name": "Name of store or town", "distance_from_day_start_km": 40.0, "confidence": "verified"}}
+      ]
     }}
   ],
   "terrain_summary": "1-2 sentences honestly describing the surface and terrain character based on the gravel_ratio and climbing data",
@@ -127,7 +133,7 @@ def generate_trip_narrative(
         client = anthropic.Anthropic(api_key=key)
         message = client.messages.create(
             model=model_name,
-            max_tokens=1500,
+            max_tokens=2000,
             system=SYSTEM_PROMPT,
             messages=[
                 {"role": "user", "content": _build_narrative_prompt(route_data)}

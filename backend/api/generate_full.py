@@ -153,6 +153,27 @@ def _map_day_segment(seg, narrative_day: Optional[dict] = None) -> dict:
     )
     key_advice = narrative_day.get("key_advice", "") if narrative_day else ""
 
+    # Structured water and grocery points from AI narrative
+    raw_water = narrative_day.get("water_points", []) if narrative_day else []
+    raw_grocery = narrative_day.get("grocery_points", []) if narrative_day else []
+
+    def _normalise_points(raw: list) -> list:
+        """Accept both plain strings and {name, distance_from_day_start_km, confidence} dicts."""
+        out = []
+        for item in raw:
+            if isinstance(item, str):
+                out.append({"name": item, "distance_from_day_start_km": None, "confidence": "unverified"})
+            elif isinstance(item, dict):
+                out.append({
+                    "name": item.get("name", "Unknown"),
+                    "distance_from_day_start_km": item.get("distance_from_day_start_km"),
+                    "confidence": item.get("confidence", "likely"),
+                })
+        return out
+
+    water_points = _normalise_points(raw_water)
+    grocery_points = _normalise_points(raw_grocery)
+
     return {
         "day": seg.day_number,
         "title": headline,
@@ -165,8 +186,8 @@ def _map_day_segment(seg, narrative_day: Optional[dict] = None) -> dict:
         "highlights": [],
         "terrain_notes": [],
         "overnight_area": overnight_area,
-        "water_points": [],
-        "grocery_points": [],
+        "water_points": water_points,
+        "grocery_points": grocery_points,
     }
 
 
