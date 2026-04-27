@@ -215,7 +215,7 @@ export default function RouteMap({
   const [elevationData, setElevationData] = useState<number[] | null>(null);
   const [pois, setPois] = useState<PoiItem[]>([]);
   const [visibleTypes, setVisibleTypes] = useState<Set<PoiItem["type"]>>(
-    new Set(["water", "campsite", "bike_shop"])
+    new Set(["water", "campsite", "bike_shop"] as PoiItem["type"][])
   );
 
   const routes: RouteOption[] = useMemo(
@@ -558,7 +558,7 @@ export default function RouteMap({
                 key={type}
                 onClick={() =>
                   setVisibleTypes((prev) => {
-                    const next = new Set(prev);
+                    const next = new Set(prev) as Set<PoiItem["type"]>;
                     if (next.has(type)) next.delete(type);
                     else next.add(type);
                     return next;
