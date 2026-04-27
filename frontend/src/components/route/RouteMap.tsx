@@ -69,26 +69,26 @@ const POI_TOGGLES: { type: PoiItem["type"]; emoji: string; label: string; color:
   { type: "bike_shop", emoji: "🚲", label: "Bike shops", color: "#f59e0b" },
 ];
 
-// ─── Elevation fetch (OpenTopoData SRTM90m, free, no key) ────────────────────
+//// ─── Elevation fetch (proxied via backend → OpenTopoData SRTM90m) ────────────
+// Direct browser calls to opentopodata.org are blocked by CORS; the backend
+// proxy at /api/elevation forwards the request server-side.
+const ELEV_API = `${process.env.REACT_APP_API_BASE || "http://localhost:8000/api"}/elevation`;
+
 async function fetchElevation(geometry: [number, number][]): Promise<number[]> {
   // Sample to ≤100 pts for the API batch limit, then interpolate back
   const n = geometry.length;
   const step = Math.max(1, Math.floor(n / 100));
   const sampled = geometry.filter((_, i) => i % step === 0);
-
-  const res = await fetch("https://api.opentopodata.org/v1/srtm90m", {
+  const res = await fetch(ELEV_API, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      locations: sampled.map(([lat, lon]) => `${lat},${lon}`).join("|"),
+      locations: sampled.map(([lat, lon]) => [lat, lon]),
     }),
   });
-  if (!res.ok) throw new Error("opentopodata error");
-
+  if (!res.ok) throw new Error(`elevation proxy error: ${res.status}`);
   const data = await res.json();
-  const sampledElevs: number[] = data.results.map(
-    (r: { elevation: number | null }) => r.elevation ?? 0
-  );
+  const sampledElevs: number[] = data.elevations;
 
   // Linear interpolation back to full-length array
   const full: number[] = [];
