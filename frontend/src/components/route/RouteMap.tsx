@@ -251,7 +251,7 @@ export default function RouteMap({
     const east  = Math.max(...lons) + pad;
 
     let cancelled = false;
-    api.getPois(south, west, north, east)
+    api.getPois(south, west, north, east, "water,campsite,bike_shop", activeRoute.geometry)
       .then((data) => { if (!cancelled) setPois(data.pois); })
       .catch(() => { /* silently skip if Overpass is down */ });
 

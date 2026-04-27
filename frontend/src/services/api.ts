@@ -98,7 +98,8 @@ export const api = {
     west: number,
     north: number,
     east: number,
-    types = "water,campsite,bike_shop"
+    types = "water,campsite,bike_shop",
+    routeCoords?: [number, number][]
   ): Promise<{ pois: PoiItem[] }> => {
     const p = new URLSearchParams({
       south: south.toString(),
@@ -107,6 +108,12 @@ export const api = {
       east: east.toString(),
       types,
     });
+    if (routeCoords && routeCoords.length > 0) {
+      // Sample to max 300 points to keep URL size reasonable
+      const step = Math.max(1, Math.floor(routeCoords.length / 300));
+      const sampled = routeCoords.filter((_, i) => i % step === 0);
+      p.set("route", sampled.map(([lat, lon]) => `${lat},${lon}`).join("|"));
+    }
     return request(`/pois?${p}`);
   },
 };
