@@ -157,22 +157,25 @@ def _design_loop_corridor(
         CorridorSpec with origin, destination (= origin for loops), and
         via_points defining the corridor shape.
     """
-    # Approximate radius for the loop (half the circumference of a circle)
-    # A circle of circumference C has radius C / (2π)
-    radius_km = target_distance_km / (2 * math.pi)
+    # Road distance is typically 1.4–1.6x the straight-line distance for cycling routes.
+    # We use a factor of 1.5 to size the corridor so Mapbox finds a route close to target_distance_km.
+    # The loop circumference = 2π * radius, so radius = target / (2π * road_factor)
+    road_factor = 1.5
+    radius_km = target_distance_km / (2 * math.pi * road_factor)
     # Convert km to approximate degrees (1 deg lat ≈ 111 km)
     radius_deg = radius_km / 111.0
 
     lat, lon = origin
     direction = archetype_config.get("corridor_deflection", "north")
 
-    # Create 4 waypoints around the loop in the preferred direction
-    # These are rough geographic targets — Mapbox routes the actual roads
+    # Create 6 waypoints around the loop to properly define the corridor shape.
+    # More waypoints prevent Mapbox from taking shortcuts across the loop.
+    # Offsets are (dlat, dlon) multipliers applied to radius_deg.
     offsets = {
-        "north": [(0.5, 0), (1.0, 0.3), (0.5, 0.6), (0, 0.3)],
-        "south": [(-0.5, 0), (-1.0, 0.3), (-0.5, 0.6), (0, 0.3)],
-        "east":  [(0.3, 0.5), (0, 1.0), (-0.3, 0.5), (0, 0)],
-        "west":  [(0.3, -0.5), (0, -1.0), (-0.3, -0.5), (0, 0)],
+        "north": [(0.4, 0.2), (0.9, 0.1), (1.0, 0.5), (0.6, 0.9), (0.1, 0.8), (0, 0.4)],
+        "south": [(-0.4, 0.2), (-0.9, 0.1), (-1.0, 0.5), (-0.6, 0.9), (-0.1, 0.8), (0, 0.4)],
+        "east":  [(0.2, 0.4), (0.1, 0.9), (0.5, 1.0), (0.9, 0.6), (0.8, 0.1), (0.4, 0)],
+        "west":  [(0.2, -0.4), (0.1, -0.9), (0.5, -1.0), (0.9, -0.6), (0.8, -0.1), (0.4, 0)],
     }
 
     raw_offsets = offsets.get(direction, offsets["north"])
