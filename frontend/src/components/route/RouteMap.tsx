@@ -122,11 +122,13 @@ function ElevationProfile({
   elevationData,
   onPositionClick,
   onHover,
+  mapHoverIdx,
 }: {
   route: RouteOption | null;
   elevationData: number[] | null;
   onPositionClick: (coord: [number, number]) => void;
   onHover: (coord: [number, number] | null) => void;
+  mapHoverIdx: number | null;
 }) {
   if (!route || !route.geometry || route.geometry.length < 2) return null;
 
@@ -192,6 +194,17 @@ function ElevationProfile({
       >
         <path d={areaD} fill={`${colors.line}22`} />
         <path d={pathD} fill="none" stroke={colors.line} strokeWidth="2" />
+        {mapHoverIdx !== null && (() => {
+          const x = (mapHoverIdx / (n - 1)) * W;
+          const h = heights[mapHoverIdx];
+          const y = H - ((h - minH) / range) * H;
+          return (
+            <>
+              <line x1={x} y1={0} x2={x} y2={H} stroke="#fff" strokeWidth="1" strokeOpacity={0.6} strokeDasharray="3 2" />
+              <circle cx={x} cy={y} r={3} fill={colors.line} stroke="#fff" strokeWidth="1.5" />
+            </>
+          );
+        })()}
       </svg>
     </div>
   );
@@ -213,6 +226,8 @@ export default function RouteMap({
   const hoverMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [elevationData, setElevationData] = useState<number[] | null>(null);
+  const [elevHoverIdx, setElevHoverIdx] = useState<number | null>(null);
+  const elevHoverIdxRef = useRef<number | null>(null);
   const [pois, setPois] = useState<PoiItem[]>([]);
   const [visibleTypes, setVisibleTypes] = useState<Set<PoiItem["type"]>>(
     new Set(["water", "campsite", "bike_shop"] as PoiItem["type"][])
@@ -542,6 +557,42 @@ export default function RouteMap({
     }
   }, [mapReady, routes, effectiveActiveId, compareMode, onRouteClick, activeRoute]);
 
+  // ── Map mousemove → highlight position on elevation strip ─────────────────
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || !activeRoute?.geometry?.length) return;
+    const map = mapRef.current;
+    const geom = activeRoute.geometry; // [lat, lon][]
+    const n = geom.length;
+
+    const onMove = (e: maplibregl.MapMouseEvent) => {
+      const { lng, lat } = e.lngLat;
+      // Find nearest geometry index using haversine approximation
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      const step = Math.max(1, Math.floor(n / 300)); // sample for perf
+      for (let i = 0; i < n; i += step) {
+        const [glat, glon] = geom[i];
+        const d = (glat - lat) ** 2 + (glon - lng) ** 2;
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+      if (elevHoverIdxRef.current !== bestIdx) {
+        elevHoverIdxRef.current = bestIdx;
+        setElevHoverIdx(bestIdx);
+      }
+    };
+    const onLeave = () => {
+      elevHoverIdxRef.current = null;
+      setElevHoverIdx(null);
+    };
+
+    map.on("mousemove", onMove);
+    map.on("mouseleave", onLeave);
+    return () => {
+      map.off("mousemove", onMove);
+      map.off("mouseleave", onLeave);
+    };
+  }, [mapReady, activeRoute?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Elevation click → fly to ───────────────────────────────────────────────
   const flyTo = useCallback(([lat, lon]: [number, number]) => {
     mapRef.current?.flyTo({ center: [lon, lat], zoom: 13, duration: 600 });
@@ -621,6 +672,7 @@ export default function RouteMap({
           elevationData={elevationData}
           onPositionClick={flyTo}
           onHover={handleElevHover}
+          mapHoverIdx={elevHoverIdx}
         />
       )}
     </div>

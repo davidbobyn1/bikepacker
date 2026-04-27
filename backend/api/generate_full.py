@@ -212,14 +212,14 @@ def _map_route_to_response(
 
     overnight_areas = [
         {
-            "name": seg.overnight_name or f"Night {seg.day_number}",
+            "name": seg.overnight_name or f"Night {seg.day_number} camp",
             "description": f"Night {seg.day_number} overnight stop",
-            "coordinates": list(seg.overnight_coord) if seg.overnight_coord else [0, 0],
+            # Always use a real coord — corridor_planner guarantees end_coord fallback
+            "coordinates": list(seg.overnight_coord) if seg.overnight_coord else list(seg.end_coord),
             "options": [],
             "framing_note": "",
         }
-        for seg in route.day_segments[:-1]
-        if seg.overnight_name
+        for seg in route.day_segments[:-1]  # skip last day (return to origin)
     ]
 
     route_id = f"{request_id}-{rank}"

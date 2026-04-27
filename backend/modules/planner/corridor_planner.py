@@ -97,8 +97,11 @@ ARCHETYPES = {
     "adventurous": {
         "label": "The Adventure",
         "tagline": "Technical, remote, rewarding",
-        "profile": RouteProfile.CYCLING_MOUNTAIN,
-        "corridor_deflection": "north",
+        # Use standard cycling profile — cycling-mountain is unavailable in many regions
+        # and causes silent failures. The adventurous character comes from the corridor
+        # deflection (south) and wider radius, not the Mapbox profile.
+        "profile": RouteProfile.CYCLING,
+        "corridor_deflection": "south",
         "max_strava_segments": 4,
         "strava_min_cat": 2,   # prefer harder segments
     },
@@ -141,12 +144,10 @@ def _design_loop_corridor(
     """
     Design a loop corridor for a given origin and target distance.
 
-    For a loop, we create a rough circular corridor by placing waypoints
-    around the origin at a radius derived from the target distance.
-    The Mapbox router will find the actual roads within this corridor.
-
-    The corridor is deflected in the archetype's preferred direction to
-    produce differentiated route shapes.
+    Places 8 waypoints evenly around a circle (clockwise from a start angle
+    biased by the archetype direction).  A true circular spread forces Mapbox
+    to route all the way around the loop instead of cutting back across it,
+    eliminating the out-and-back spaghetti shape.
 
     Args:
         origin:            (lat, lon) of the start/end point.
@@ -157,32 +158,34 @@ def _design_loop_corridor(
         CorridorSpec with origin, destination (= origin for loops), and
         via_points defining the corridor shape.
     """
-    # Road distance is typically 1.4–1.6x the straight-line distance for cycling routes.
-    # We use a factor of 1.5 to size the corridor so Mapbox finds a route close to target_distance_km.
-    # The loop circumference = 2π * radius, so radius = target / (2π * road_factor)
-    road_factor = 1.5
+    # road_factor=2.0: real road distance is roughly 2x the straight-line
+    # circumference for mountain/rural cycling corridors.
+    # loop circumference = 2π * radius  ⇒  radius = target / (2π * road_factor)
+    road_factor = 2.0
     radius_km = target_distance_km / (2 * math.pi * road_factor)
-    # Convert km to approximate degrees (1 deg lat ≈ 111 km)
-    radius_deg = radius_km / 111.0
-
+    # Convert km to approximate degrees (1 deg lat ≈ 111 km, 1 deg lon ≈ 111*cos(lat) km)
     lat, lon = origin
+    radius_lat = radius_km / 111.0
+    radius_lon = radius_km / (111.0 * math.cos(math.radians(lat)))
+
     direction = archetype_config.get("corridor_deflection", "north")
 
-    # Create 6 waypoints around the loop to properly define the corridor shape.
-    # More waypoints prevent Mapbox from taking shortcuts across the loop.
-    # Offsets are (dlat, dlon) multipliers applied to radius_deg.
-    offsets = {
-        "north": [(0.4, 0.2), (0.9, 0.1), (1.0, 0.5), (0.6, 0.9), (0.1, 0.8), (0, 0.4)],
-        "south": [(-0.4, 0.2), (-0.9, 0.1), (-1.0, 0.5), (-0.6, 0.9), (-0.1, 0.8), (0, 0.4)],
-        "east":  [(0.2, 0.4), (0.1, 0.9), (0.5, 1.0), (0.9, 0.6), (0.8, 0.1), (0.4, 0)],
-        "west":  [(0.2, -0.4), (0.1, -0.9), (0.5, -1.0), (0.9, -0.6), (0.8, -0.1), (0.4, 0)],
-    }
+    # Start angle (degrees from north, clockwise) biased by archetype direction
+    # so each archetype explores a different part of the landscape.
+    start_angle_deg = {"north": 0, "south": 180, "east": 90, "west": 270}.get(direction, 0)
 
-    raw_offsets = offsets.get(direction, offsets["north"])
-    via_points = [
-        (lat + dlat * radius_deg, lon + dlon * radius_deg)
-        for dlat, dlon in raw_offsets
-    ]
+    # Place 8 waypoints evenly around the circle, starting from start_angle.
+    # Using 8 points (every 45°) gives Mapbox enough guidance to route a full
+    # loop without shortcuts while staying within the 25-waypoint API limit.
+    n_points = 8
+    via_points = []
+    for i in range(n_points):
+        angle_deg = start_angle_deg + (360.0 / n_points) * i
+        angle_rad = math.radians(angle_deg)
+        # North = 0°: dlat = cos(angle), dlon = sin(angle)
+        dlat = math.cos(angle_rad) * radius_lat
+        dlon = math.sin(angle_rad) * radius_lon
+        via_points.append((lat + dlat, lon + dlon))
 
     return CorridorSpec(
         origin=origin,
@@ -510,8 +513,16 @@ def _attach_overnight_stops(
                 )
             else:
                 seg.overnight_name = f"Dispersed camping area (Night {seg.day_number})"
+                seg.overnight_coord = seg.end_coord  # always pin to day end point
                 seg.overnight_type = "dispersed"
     except Exception as exc:
-        logger.warning("Overnight stop lookup failed: %s — using defaults", exc)
+        logger.warning("Overnight stop lookup failed: %s — using end_coord fallback", exc)
+
+    # Safety pass: ensure every intermediate day has a coord so map markers always render
+    for seg in day_segments[:-1]:
+        if not seg.overnight_coord:
+            seg.overnight_name = seg.overnight_name or f"Night {seg.day_number} camp"
+            seg.overnight_coord = seg.end_coord
+            seg.overnight_type = seg.overnight_type or "dispersed"
 
     return day_segments
