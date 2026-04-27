@@ -10,6 +10,8 @@ import RouteMap from "./RouteMap";
 import ConfidenceBadge from "./ConfidenceBadge";
 import ElevationProfile from "./ElevationProfile";
 import WeatherStrip from "./WeatherStrip";
+import ResupplyTimeline from "./ResupplyTimeline";
+import RefineRoutePanel from "./RefineRoutePanel";
 import type { RouteOption, TerrainNote } from "../../types/route";
 import { api } from "../../services/api";
 
@@ -448,6 +450,12 @@ export default function RouteDetail({ route, onBack, onSave, isSaved }: RouteDet
           </ul>
         </Section>
       )}
+
+      {/* ── RESUPPLY TIMELINE ── */}
+      <ResupplyTimeline route={route} />
+
+      {/* ── REFINE THIS ROUTE ── */}
+      <RefineRoutePanel route={route} />
 
       {/* Bottom GPX CTA */}
       <div className="flex justify-center pb-4">
