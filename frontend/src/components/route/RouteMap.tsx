@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useCallback, useMemo, useState } from "react"
 import maplibregl from "maplibre-gl";
 
 import type { RouteOption } from "../../types/route";
+import { api, type PoiItem } from "../../services/api";
 
 /**
  * RouteMap.tsx — MapLibre GL powered route map
@@ -60,6 +61,13 @@ const ARCHETYPE_COLORS: Record<string, { line: string; glow: string }> = {
   adventurous: { line: "#10b981", glow: "#6ee7b7" },
 };
 const INACTIVE_COLOR = "#94a3b8";
+
+// ─── POI toggle config ────────────────────────────────────────────────────────
+const POI_TOGGLES: { type: PoiItem["type"]; emoji: string; label: string; color: string }[] = [
+  { type: "water",     emoji: "💧", label: "Water",     color: "#3b82f6" },
+  { type: "campsite",  emoji: "⛺", label: "Campsites", color: "#10b981" },
+  { type: "bike_shop", emoji: "🚲", label: "Bike shops", color: "#f59e0b" },
+];
 
 // ─── Elevation fetch (OpenTopoData SRTM90m, free, no key) ────────────────────
 async function fetchElevation(geometry: [number, number][]): Promise<number[]> {
@@ -201,9 +209,14 @@ export default function RouteMap({
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const poiMarkersRef = useRef<maplibregl.Marker[]>([]);
   const hoverMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [elevationData, setElevationData] = useState<number[] | null>(null);
+  const [pois, setPois] = useState<PoiItem[]>([]);
+  const [visibleTypes, setVisibleTypes] = useState<Set<PoiItem["type"]>>(
+    new Set(["water", "campsite", "bike_shop"])
+  );
 
   const routes: RouteOption[] = useMemo(
     () => multiRoutes ?? (singleRoute ? [singleRoute] : []),
@@ -224,6 +237,71 @@ export default function RouteMap({
 
     return () => { cancelled = true; };
   }, [activeRoute?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch POIs when active route changes ──────────────────────────────────
+  useEffect(() => {
+    if (!activeRoute?.geometry?.length) return;
+
+    const lats = activeRoute.geometry.map(([lat]) => lat);
+    const lons = activeRoute.geometry.map(([, lon]) => lon);
+    const pad = 0.04; // ~4 km padding around route bounds
+    const south = Math.min(...lats) - pad;
+    const north = Math.max(...lats) + pad;
+    const west  = Math.min(...lons) - pad;
+    const east  = Math.max(...lons) + pad;
+
+    let cancelled = false;
+    api.getPois(south, west, north, east)
+      .then((data) => { if (!cancelled) setPois(data.pois); })
+      .catch(() => { /* silently skip if Overpass is down */ });
+
+    return () => { cancelled = true; };
+  }, [activeRoute?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Draw / remove POI markers whenever pois or visibility toggles change ──
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const map = mapRef.current;
+
+    // Remove all existing POI markers
+    poiMarkersRef.current.forEach((m) => m.remove());
+    poiMarkersRef.current = [];
+
+    pois.forEach((poi) => {
+      if (!visibleTypes.has(poi.type)) return;
+
+      const cfg = POI_TOGGLES.find((t) => t.type === poi.type);
+      if (!cfg) return;
+
+      const el = document.createElement("div");
+      el.style.cssText = [
+        `background:#1e293b;`,
+        `border:2px solid ${cfg.color};`,
+        `border-radius:50%;`,
+        `width:26px;height:26px;`,
+        `display:flex;align-items:center;justify-content:center;`,
+        `font-size:13px;`,
+        `box-shadow:0 2px 6px rgba(0,0,0,.4);`,
+        `cursor:pointer;`,
+      ].join("");
+      el.textContent = cfg.emoji;
+
+      const popupHtml = `
+        <div style="font-size:12px;padding:3px 2px;min-width:80px">
+          <strong>${poi.name ?? cfg.label}</strong>
+          ${poi.name ? `<br/><span style="color:#94a3b8">${cfg.label}</span>` : ""}
+        </div>`;
+
+      const popup = new maplibregl.Popup({ offset: 14, closeButton: false }).setHTML(popupHtml);
+
+      poiMarkersRef.current.push(
+        new maplibregl.Marker({ element: el })
+          .setLngLat([poi.lon, poi.lat])
+          .setPopup(popup)
+          .addTo(map)
+      );
+    });
+  }, [mapReady, pois, visibleTypes]);
 
   // ── Initialise map (synchronous — no async, no fetch) ──────────────────────
   useEffect(() => {
@@ -275,6 +353,8 @@ export default function RouteMap({
       clearTimeout(t2);
       clearTimeout(t3);
       window.removeEventListener("resize", onResize);
+      poiMarkersRef.current.forEach((m) => m.remove());
+      poiMarkersRef.current = [];
       map.remove();
       mapRef.current = null;
       setMapReady(false);
@@ -468,6 +548,39 @@ export default function RouteMap({
         .maplibregl-canvas-container { width: 100% !important; height: 100% !important; }
         .maplibregl-canvas { width: 100% !important; height: 100% !important; }
       `}</style>
+      {/* POI layer toggles — top-left, stays out of the nav controls (top-right) */}
+      {mapReady && (
+        <div className="absolute top-3 left-3 z-10 flex gap-1.5 flex-wrap">
+          {POI_TOGGLES.map(({ type, emoji, label }) => {
+            const active = visibleTypes.has(type);
+            return (
+              <button
+                key={type}
+                onClick={() =>
+                  setVisibleTypes((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(type)) next.delete(type);
+                    else next.add(type);
+                    return next;
+                  })
+                }
+                style={{
+                  background: active ? "rgba(15,23,42,0.88)" : "rgba(15,23,42,0.50)",
+                  border: `1px solid ${active ? "rgba(148,163,184,0.5)" : "rgba(71,85,105,0.4)"}`,
+                  backdropFilter: "blur(6px)",
+                }}
+                className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                  active ? "text-white" : "text-slate-500"
+                }`}
+              >
+                <span>{emoji}</span>
+                <span className="hidden sm:inline">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {mapReady && (
         <ElevationProfile
           route={activeRoute}

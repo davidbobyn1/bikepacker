@@ -1,5 +1,12 @@
 import type { TripRequest, GenerateResponse, RouteOption } from "../types/route";
 
+export interface PoiItem {
+  type: "water" | "campsite" | "bike_shop";
+  lat: number;
+  lon: number;
+  name: string | null;
+}
+
 const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8000/api";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -85,4 +92,21 @@ export const api = {
 
   getMapboxUsage: () =>
     request<{ date: string; count: number; limit: number; remaining: number }>("/mapbox-usage"),
+
+  getPois: (
+    south: number,
+    west: number,
+    north: number,
+    east: number,
+    types = "water,campsite,bike_shop"
+  ): Promise<{ pois: PoiItem[] }> => {
+    const p = new URLSearchParams({
+      south: south.toString(),
+      west: west.toString(),
+      north: north.toString(),
+      east: east.toString(),
+      types,
+    });
+    return request(`/pois?${p}`);
+  },
 };
