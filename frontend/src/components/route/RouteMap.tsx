@@ -6,41 +6,38 @@ import type { RouteOption } from "../../types/route";
 /**
  * RouteMap.tsx — MapLibre GL powered route map
  *
- * Uses an inline raster-tile style backed by OpenStreetMap tiles.
- * This is intentionally the simplest possible setup:
- *   - No external style.json (no Mapbox / Stadia validation issues)
- *   - No mapbox:// protocol (no transformRequest gymnastics)
- *   - No async fetches in useEffect (no TS build failures)
- *
- * The CDN workerUrl assignment below fixes CRA/webpack's broken handling
- * of MapLibre's tile worker — without it, tiles never decode in production.
+ * Basemap: CARTO Voyager raster tiles (muted, no auth required)
+ * Elevation: OpenTopoData SRTM90m API (free, no key, ≤100 pts/batch)
+ * Cursor sync: hover on elevation strip → dot marker moves on map
  */
 
 // ─── Worker fix (must run before any Map is created) ─────────────────────────
 (maplibregl as any).workerUrl =
   "https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl-csp-worker.js";
 
-// ─── Inline style (raster OSM tiles, no auth required) ───────────────────────
-const RASTER_STYLE: any = {
+// ─── Inline style (CARTO Voyager — muted colours, no auth) ───────────────────
+const CARTO_STYLE: any = {
   version: 8,
   sources: {
-    "osm-tiles": {
+    "carto-voyager": {
       type: "raster",
       tiles: [
-        "https://a.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "https://b.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        "https://c.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+        "https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+        "https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
+        "https://d.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png",
       ],
       tileSize: 256,
-      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      attribution:
+        '© <a href="https://carto.com/">CARTO</a> © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       maxzoom: 19,
     },
   },
   layers: [
     {
-      id: "osm-tiles",
+      id: "carto-voyager",
       type: "raster",
-      source: "osm-tiles",
+      source: "carto-voyager",
       minzoom: 0,
       maxzoom: 22,
     },
@@ -64,28 +61,72 @@ const ARCHETYPE_COLORS: Record<string, { line: string; glow: string }> = {
 };
 const INACTIVE_COLOR = "#94a3b8";
 
+// ─── Elevation fetch (OpenTopoData SRTM90m, free, no key) ────────────────────
+async function fetchElevation(geometry: [number, number][]): Promise<number[]> {
+  // Sample to ≤100 pts for the API batch limit, then interpolate back
+  const n = geometry.length;
+  const step = Math.max(1, Math.floor(n / 100));
+  const sampled = geometry.filter((_, i) => i % step === 0);
+
+  const res = await fetch("https://api.opentopodata.org/v1/srtm90m", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      locations: sampled.map(([lat, lon]) => ({ latitude: lat, longitude: lon })),
+    }),
+  });
+  if (!res.ok) throw new Error("opentopodata error");
+
+  const data = await res.json();
+  const sampledElevs: number[] = data.results.map(
+    (r: { elevation: number | null }) => r.elevation ?? 0
+  );
+
+  // Linear interpolation back to full-length array
+  const full: number[] = [];
+  for (let i = 0; i < sampledElevs.length; i++) {
+    const eA = sampledElevs[i];
+    const eB = sampledElevs[i + 1] ?? eA;
+    const count = i === sampledElevs.length - 1 ? n - full.length : step;
+    for (let j = 0; j < count; j++) {
+      full.push(eA + (eB - eA) * (j / step));
+    }
+  }
+  return full.slice(0, n);
+}
+
+// Synthetic fallback — keeps the strip visible while fetch is in progress
+function syntheticElevation(geometry: [number, number][], totalClimbM: number): number[] {
+  const n = geometry.length;
+  return geometry.map((_, i) => {
+    const t = i / n;
+    return (
+      Math.sin(t * Math.PI * 2.5) * (totalClimbM / 5) +
+      Math.sin(t * Math.PI * 0.8) * (totalClimbM / 3) +
+      200
+    );
+  });
+}
+
 // ─── Elevation profile strip ─────────────────────────────────────────────────
 function ElevationProfile({
   route,
+  elevationData,
   onPositionClick,
+  onHover,
 }: {
   route: RouteOption | null;
+  elevationData: number[] | null;
   onPositionClick: (coord: [number, number]) => void;
+  onHover: (coord: [number, number] | null) => void;
 }) {
   if (!route || !route.geometry || route.geometry.length < 2) return null;
 
   const points = route.geometry;
   const n = points.length;
-  const totalClimb = route.total_climbing_m || 500;
-
-  const heights = points.map((_, i) => {
-    const t = i / n;
-    return (
-      Math.sin(t * Math.PI * 2.5) * (totalClimb / 5) +
-      Math.sin(t * Math.PI * 0.8) * (totalClimb / 3) +
-      200
-    );
-  });
+  const heights =
+    elevationData ??
+    syntheticElevation(points, route.total_climbing_m || 500);
 
   const maxH = Math.max(...heights);
   const minH = Math.min(...heights);
@@ -104,12 +145,16 @@ function ElevationProfile({
   const areaD = `${pathD} L ${W} ${H} L 0 ${H} Z`;
   const colors = ARCHETYPE_COLORS[route.archetype] ?? ARCHETYPE_COLORS.scenic;
 
-  const handleClick = (e: React.MouseEvent<SVGSVGElement>) => {
+  const getCoordAtEvent = (e: React.MouseEvent<SVGSVGElement>): [number, number] => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const ratio = (e.clientX - rect.left) / rect.width;
+    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
     const idx = Math.min(Math.floor(ratio * (n - 1)), n - 1);
-    onPositionClick(points[idx]);
+    return points[idx];
   };
+
+  const elevGainLabel = elevationData
+    ? `${Math.round(maxH - minH)} m ↑`
+    : `~${route.total_climbing_m.toFixed(0)} m ↑`;
 
   return (
     <div
@@ -119,17 +164,22 @@ function ElevationProfile({
       <div className="flex items-center px-3 pt-1 gap-3">
         <span className="text-xs text-gray-400 font-medium">Elevation</span>
         <span className="text-xs text-gray-600">
-          {route.total_distance_km.toFixed(0)} km · {route.total_climbing_m.toFixed(0)} m ↑
+          {route.total_distance_km.toFixed(0)} km · {elevGainLabel}
         </span>
+        {!elevationData && (
+          <span className="text-xs text-gray-700 italic">loading real data…</span>
+        )}
         <span className="text-xs text-gray-700 ml-auto hidden sm:block">
-          Click to fly to location
+          Click or hover to explore
         </span>
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
         className="w-full cursor-crosshair"
         style={{ height: 56 }}
-        onClick={handleClick}
+        onClick={(e) => onPositionClick(getCoordAtEvent(e))}
+        onMouseMove={(e) => onHover(getCoordAtEvent(e))}
+        onMouseLeave={() => onHover(null)}
         preserveAspectRatio="none"
       >
         <path d={areaD} fill={`${colors.line}22`} />
@@ -151,9 +201,10 @@ export default function RouteMap({
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<maplibregl.Marker[]>([]);
+  const hoverMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [elevationData, setElevationData] = useState<number[] | null>(null);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const routes: RouteOption[] = useMemo(
     () => multiRoutes ?? (singleRoute ? [singleRoute] : []),
     [multiRoutes, singleRoute]
@@ -161,13 +212,26 @@ export default function RouteMap({
   const effectiveActiveId = activeRouteId ?? routes[0]?.id ?? null;
   const activeRoute = routes.find((r) => r.id === effectiveActiveId) ?? routes[0] ?? null;
 
+  // ── Fetch real elevation whenever active route changes ─────────────────────
+  useEffect(() => {
+    if (!activeRoute?.geometry?.length) return;
+    setElevationData(null); // clear stale data while fetching
+
+    let cancelled = false;
+    fetchElevation(activeRoute.geometry)
+      .then((data) => { if (!cancelled) setElevationData(data); })
+      .catch(() => { /* fall back to synthetic — no-op */ });
+
+    return () => { cancelled = true; };
+  }, [activeRoute?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Initialise map (synchronous — no async, no fetch) ──────────────────────
   useEffect(() => {
     if (!mapContainer.current || mapRef.current) return;
 
     const map = new maplibregl.Map({
       container: mapContainer.current,
-      style: RASTER_STYLE,
+      style: CARTO_STYLE,
       center: [-122.59, 37.99],
       zoom: 10,
       attributionControl: false,
@@ -187,11 +251,9 @@ export default function RouteMap({
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(mapContainer.current);
 
-    // Aggressive resize loop for the first second — catches Framer Motion
-    // fade-in completion, lazy layout, and any other late dimension changes.
     let resizeFrames = 0;
     const resizeLoop = () => {
-      if (!mapRef.current || resizeFrames > 60) return; // ~1 second @ 60fps
+      if (!mapRef.current || resizeFrames > 60) return;
       map.resize();
       resizeFrames++;
       requestAnimationFrame(resizeLoop);
@@ -218,6 +280,26 @@ export default function RouteMap({
       setMapReady(false);
     };
   }, []);
+
+  // ── Hover marker (created once map is ready) ───────────────────────────────
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+
+    const el = document.createElement("div");
+    el.style.cssText =
+      "width:12px;height:12px;border-radius:50%;background:#fff;border:2.5px solid #2563eb;box-shadow:0 2px 6px rgba(0,0,0,.5);pointer-events:none;display:none;";
+
+    const marker = new maplibregl.Marker({ element: el })
+      .setLngLat([0, 0])
+      .addTo(mapRef.current);
+
+    hoverMarkerRef.current = marker;
+
+    return () => {
+      marker.remove();
+      hoverMarkerRef.current = null;
+    };
+  }, [mapReady]);
 
   // ── Draw / redraw routes ───────────────────────────────────────────────────
   useEffect(() => {
@@ -346,8 +428,22 @@ export default function RouteMap({
     }
   }, [mapReady, routes, effectiveActiveId, compareMode, onRouteClick, activeRoute]);
 
+  // ── Elevation click → fly to ───────────────────────────────────────────────
   const flyTo = useCallback(([lat, lon]: [number, number]) => {
     mapRef.current?.flyTo({ center: [lon, lat], zoom: 13, duration: 600 });
+  }, []);
+
+  // ── Elevation hover → move dot marker ─────────────────────────────────────
+  const handleElevHover = useCallback((coord: [number, number] | null) => {
+    const marker = hoverMarkerRef.current;
+    if (!marker) return;
+    if (!coord) {
+      marker.getElement().style.display = "none";
+    } else {
+      const [lat, lon] = coord;
+      marker.setLngLat([lon, lat]);
+      marker.getElement().style.display = "";
+    }
   }, []);
 
   return (
@@ -355,10 +451,6 @@ export default function RouteMap({
       className={`relative rounded-xl overflow-hidden ${className}`}
       style={{ height: 520, minHeight: 400, width: "100%" }}
     >
-      {/* Inline style guarantees the map container has explicit, non-zero
-          dimensions BEFORE MapLibre measures it at mount. The previous
-          `absolute inset-0` approach left dimensions dependent on Tailwind
-          arbitrary classes resolving correctly, which they didn't. */}
       <div
         ref={mapContainer}
         style={{
@@ -371,15 +463,18 @@ export default function RouteMap({
           height: "100%",
         }}
       />
-      {/* Force MapLibre's internal canvas to fill its container regardless
-          of any Tailwind preflight / specificity surprises. */}
       <style>{`
         .maplibregl-map { width: 100% !important; height: 100% !important; position: absolute !important; inset: 0 !important; }
         .maplibregl-canvas-container { width: 100% !important; height: 100% !important; }
         .maplibregl-canvas { width: 100% !important; height: 100% !important; }
       `}</style>
       {mapReady && (
-        <ElevationProfile route={activeRoute} onPositionClick={flyTo} />
+        <ElevationProfile
+          route={activeRoute}
+          elevationData={elevationData}
+          onPositionClick={flyTo}
+          onHover={handleElevHover}
+        />
       )}
     </div>
   );
