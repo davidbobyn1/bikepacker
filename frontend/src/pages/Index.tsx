@@ -303,7 +303,7 @@ export default function Index() {
         <SavedRoutesList
           savedRoutes={savedRoutes}
           onClose={() => setShowSaved(false)}
-          onViewDetails={(route) => { setShowSaved(false); handleViewDetails(route); }}
+          onOpen={(route) => { setShowSaved(false); handleViewDetails(route); }}
           onRemove={removeRoute}
           onRename={renameRoute}
           onCompare={(selected) => { setCompareRoutes(selected); setShowSaved(false); }}
