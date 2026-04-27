@@ -1,15 +1,121 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Serif+Display&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Parchment background ~#faf6ed */
+    --background: 40 45% 95%;
+    --foreground: 30 20% 15%;
+
+    --card: 38 50% 97%;
+    --card-foreground: 30 20% 15%;
+
+    --popover: 38 50% 97%;
+    --popover-foreground: 30 20% 15%;
+
+    /* Deep forest green ~#2d5a27 */
+    --primary: 115 40% 19%;
+    --primary-foreground: 40 45% 96%;
+
+    --secondary: 38 30% 89%;
+    --secondary-foreground: 30 25% 22%;
+
+    --muted: 38 25% 90%;
+    --muted-foreground: 30 12% 40%;
+
+    /* Burnt amber */
+    --accent: 28 70% 45%;
+    --accent-foreground: 40 45% 96%;
+
+    --destructive: 0 65% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 35 20% 82%;
+    --input: 35 20% 82%;
+    --ring: 115 40% 19%;
+
+    --radius: 0.75rem;
+
+    /* Semantic trail/camp/hotel/grocery tokens */
+    --trail: 155 45% 38%;
+    --trail-foreground: 40 25% 97%;
+
+    --camp: 25 70% 50%;
+    --camp-foreground: 40 25% 97%;
+
+    --hotel: 220 50% 55%;
+    --hotel-foreground: 40 25% 97%;
+
+    --grocery: 155 50% 42%;
+    --grocery-foreground: 40 25% 97%;
+
+    --confidence-high:   155 45% 38%;
+    --confidence-medium:  35 80% 52%;
+    --confidence-low:      0 65% 50%;
+  }
+
+  .dark {
+    --background: 200 15% 10%;
+    --foreground: 40 15% 90%;
+    --card: 200 15% 13%;
+    --card-foreground: 40 15% 90%;
+    --popover: 200 15% 13%;
+    --popover-foreground: 40 15% 90%;
+    --primary: 155 40% 45%;
+    --primary-foreground: 200 15% 10%;
+    --secondary: 200 10% 18%;
+    --secondary-foreground: 40 15% 90%;
+    --muted: 200 10% 18%;
+    --muted-foreground: 200 8% 55%;
+    --accent: 35 80% 52%;
+    --accent-foreground: 200 15% 10%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 200 10% 20%;
+    --input: 200 10% 20%;
+    --ring: 155 40% 45%;
+    --trail: 155 45% 45%;
+    --trail-foreground: 40 25% 97%;
+    --camp: 25 70% 55%;
+    --camp-foreground: 40 25% 97%;
+    --hotel: 220 50% 60%;
+    --hotel-foreground: 40 25% 97%;
+    --grocery: 155 50% 48%;
+    --grocery-foreground: 40 25% 97%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
   body {
-    @apply bg-background text-foreground;
-    font-family: Inter, system-ui, sans-serif;
+    @apply bg-background text-foreground font-sans antialiased;
     margin: 0;
+  }
+
+  h1, h2, h3 {
+    font-family: 'DM Serif Display', serif;
   }
 }
 
 /* MapLibre GL overrides */
 .maplibregl-map { font-family: inherit; }
 .maplibregl-ctrl-logo { display: none !important; }
+
+/* MapLibre popup styling to match design system */
+.maplibregl-popup-content {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  padding: 8px 10px;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 12px;
+}
+.maplibregl-popup-tip { display: none; }
