@@ -187,9 +187,20 @@ export default function RouteMap({
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(mapContainer.current);
 
+    // Aggressive resize loop for the first second — catches Framer Motion
+    // fade-in completion, lazy layout, and any other late dimension changes.
+    let resizeFrames = 0;
+    const resizeLoop = () => {
+      if (!mapRef.current || resizeFrames > 60) return; // ~1 second @ 60fps
+      map.resize();
+      resizeFrames++;
+      requestAnimationFrame(resizeLoop);
+    };
+    requestAnimationFrame(resizeLoop);
+
     const t1 = setTimeout(() => map.resize(), 100);
     const t2 = setTimeout(() => map.resize(), 500);
-    const t3 = setTimeout(() => map.resize(), 1000);
+    const t3 = setTimeout(() => map.resize(), 1500);
 
     const onResize = () => map.resize();
     window.addEventListener("resize", onResize);
@@ -341,10 +352,32 @@ export default function RouteMap({
 
   return (
     <div
-      className={`relative overflow-hidden rounded-xl ${className}`}
-      style={{ minHeight: 400 }}
+      className={`relative rounded-xl overflow-hidden ${className}`}
+      style={{ height: 520, minHeight: 400, width: "100%" }}
     >
-      <div ref={mapContainer} className="absolute inset-0" />
+      {/* Inline style guarantees the map container has explicit, non-zero
+          dimensions BEFORE MapLibre measures it at mount. The previous
+          `absolute inset-0` approach left dimensions dependent on Tailwind
+          arbitrary classes resolving correctly, which they didn't. */}
+      <div
+        ref={mapContainer}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          width: "100%",
+          height: "100%",
+        }}
+      />
+      {/* Force MapLibre's internal canvas to fill its container regardless
+          of any Tailwind preflight / specificity surprises. */}
+      <style>{`
+        .maplibregl-map { width: 100% !important; height: 100% !important; position: absolute !important; inset: 0 !important; }
+        .maplibregl-canvas-container { width: 100% !important; height: 100% !important; }
+        .maplibregl-canvas { width: 100% !important; height: 100% !important; }
+      `}</style>
       {mapReady && (
         <ElevationProfile route={activeRoute} onPositionClick={flyTo} />
       )}
