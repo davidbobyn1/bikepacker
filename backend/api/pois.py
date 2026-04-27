@@ -3,6 +3,7 @@ GET /api/pois?south=&west=&north=&east=&types=water,campsite,bike_shop
 
 Live Overpass API query — no DB required.
 Returns POIs within the supplied bounding box, tagged by type.
+Tries multiple Overpass mirrors in order until one succeeds.
 """
 
 import logging
@@ -14,7 +15,11 @@ from fastapi import APIRouter, Query
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_MIRRORS = [
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+]
 MAX_PER_TYPE = 30  # cap to keep the map readable
 
 
@@ -45,6 +50,7 @@ async def get_pois(
     """
     Return POIs of the requested types within the bounding box.
     Single Overpass request covering all requested types at once.
+    Tries multiple mirrors if the primary is unavailable.
     """
     requested = {t.strip() for t in types.split(",") if t.strip()}
     bbox = f"{south},{west},{north},{east}"  # Overpass format: S,W,N,E
@@ -71,15 +77,24 @@ async def get_pois(
     if not parts:
         return {"pois": []}
 
-    query = f"[out:json][timeout:20];\n(\n  {'  '.join(parts)}\n);\nout center;"
+    query = f"[out:json][timeout:25];\n(\n  {'  '.join(parts)}\n);\nout center;"
 
-    try:
-        async with httpx.AsyncClient(timeout=25.0) as client:
-            resp = await client.post(OVERPASS_URL, data={"data": query})
-            resp.raise_for_status()
-            data = resp.json()
-    except Exception as exc:
-        logger.warning("Overpass query failed: %s", exc)
+    # Try each mirror in order
+    data = None
+    for mirror in OVERPASS_MIRRORS:
+        try:
+            async with httpx.AsyncClient(timeout=35.0) as client:
+                resp = await client.post(mirror, data={"data": query})
+                resp.raise_for_status()
+                data = resp.json()
+                logger.info("Overpass query succeeded via %s", mirror)
+                break
+        except Exception as exc:
+            logger.warning("Overpass mirror %s failed: %s", mirror, exc)
+            continue
+
+    if data is None:
+        logger.error("All Overpass mirrors failed for bbox=%s", bbox)
         return {"pois": []}
 
     # Parse elements, group by type, cap per type

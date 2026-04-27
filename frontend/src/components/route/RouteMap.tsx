@@ -80,7 +80,7 @@ async function fetchElevation(geometry: [number, number][]): Promise<number[]> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      locations: sampled.map(([lat, lon]) => ({ latitude: lat, longitude: lon })),
+      locations: sampled.map(([lat, lon]) => `${lat},${lon}`).join("|"),
     }),
   });
   if (!res.ok) throw new Error("opentopodata error");
