@@ -155,6 +155,17 @@ If distance is not mentioned, infer from trip_days and rider fitness:
   3-day beginner: 100–160 km
   2-day strong: 160–220 km
   3-day strong: 220–300 km
+  2-day elite: 200–260 km
+  3-day elite: 280–360 km
+
+HARD DISTANCE CAP: Never set total_distance_km above these limits regardless of fitness level:
+  1-day: max 130 km
+  2-day: max 260 km
+  3-day: max 390 km
+  4-day: max 480 km
+  5-day: max 600 km
+Even elite riders on loaded bikes average 80–130 km/day on mixed terrain.
+A 3-day trip at 700+ km is not physically feasible and must never be generated.
 
 ---
 

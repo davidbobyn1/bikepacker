@@ -105,8 +105,8 @@ export default function RouteCard({ route, index, onViewDetails, isBestFit }: Ro
 
         {/* Metrics strip */}
         <div className="grid grid-cols-4 gap-2 pt-1">
-          <Metric icon={<Ruler className="w-3 h-3" />}   label="km"    value={route.total_distance_km} />
-          <Metric icon={<Mountain className="w-3 h-3" />} label="climb" value={`${route.total_climbing_m}m`} />
+          <Metric icon={<Ruler className="w-3 h-3" />}   label="km"    value={route.total_distance_km.toLocaleString()} />
+          <Metric icon={<Mountain className="w-3 h-3" />} label="climb" value={`${Math.round(route.total_climbing_m).toLocaleString()}m`} />
           <Metric icon={<Percent className="w-3 h-3" />}  label="gravel" value={`${Math.round(route.gravel_ratio * 100)}%`} />
           <Metric icon={<Clock className="w-3 h-3" />}    label="days"  value={route.estimated_days} />
         </div>

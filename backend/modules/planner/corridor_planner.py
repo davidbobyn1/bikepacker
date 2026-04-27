@@ -161,7 +161,7 @@ def _design_loop_corridor(
     # road_factor=2.0: real road distance is roughly 2x the straight-line
     # circumference for mountain/rural cycling corridors.
     # loop circumference = 2π * radius  ⇒  radius = target / (2π * road_factor)
-    road_factor = 2.0
+    road_factor = 1.6
     radius_km = target_distance_km / (2 * math.pi * road_factor)
     # Convert km to approximate degrees (1 deg lat ≈ 111 km, 1 deg lon ≈ 111*cos(lat) km)
     lat, lon = origin
@@ -303,6 +303,17 @@ def plan_routes(
             target_km, trip_days, daily_km, min_target, min_target,
         )
         target_km = min_target
+
+    # Hard cap: never exceed 130 km/day regardless of what the LLM parsed.
+    # Even elite riders on loaded bikes average 80-130 km/day on mixed terrain.
+    MAX_DAILY_KM = 130.0
+    max_target = trip_days * MAX_DAILY_KM
+    if target_km > max_target:
+        logger.warning(
+            "target_km=%.0f exceeds hard cap of %.0f km (%d days x %.0f km/day) -- capping",
+            target_km, max_target, trip_days, MAX_DAILY_KM,
+        )
+        target_km = max_target
 
     logger.info(
         "Planning routes: origin=%s, target=%.0f km, %d days, %.0f km/day",
