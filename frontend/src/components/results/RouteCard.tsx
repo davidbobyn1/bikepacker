@@ -67,7 +67,6 @@ interface RouteCardProps {
 export default function RouteCard({ route, index, onViewDetails, isBestFit }: RouteCardProps) {
   const style = ARCHETYPE_STYLES[route.archetype as Archetype] ?? ARCHETYPE_STYLES.scenic;
   const topFitReasons = route.rider_fit_reasons.slice(0, 2);
-  const topTradeoff = route.tradeoffs[0];
   const gpxHref = getFullGpxUrl(route.gpx_url);
 
   return (
@@ -189,6 +188,3 @@ function LogisticsBadge({ icon, label, value, good }: { icon: React.ReactNode; l
   );
 }
 
-function truncate(s: string, n: number) {
-  return s.length > n ? s.slice(0, n) + "…" : s;
-}
