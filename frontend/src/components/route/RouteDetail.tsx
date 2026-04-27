@@ -9,6 +9,7 @@ import {
 import RouteMap from "./RouteMap";
 import ConfidenceBadge from "./ConfidenceBadge";
 import type { RouteOption, TerrainNote } from "../../types/route";
+import { api } from "../../services/api";
 
 const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8000/api";
 const getFullGpxUrl = (gpxUrl: string) => {
@@ -36,8 +37,31 @@ const archetypeAccent: Record<string, string> = {
   adventurous: "bg-camp/10 text-camp",
 };
 
+// Extract route_id from gpx_url like "/api/gpx/{route_id}"
+const getRouteId = (gpxUrl: string): string => {
+  if (!gpxUrl) return "";
+  const parts = gpxUrl.split("/");
+  return parts[parts.length - 1] || "";
+};
+
 export default function RouteDetail({ route, onBack }: RouteDetailProps) {
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
+  const [rwgpsStatus, setRwgpsStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [rwgpsUrl, setRwgpsUrl] = useState<string | null>(null);
+
+  const handleExportToRwgps = async () => {
+    const routeId = getRouteId(route.gpx_url);
+    if (!routeId) return;
+    setRwgpsStatus("loading");
+    try {
+      const result = await api.exportToRwgps(routeId);
+      setRwgpsUrl(result.url);
+      setRwgpsStatus("success");
+      window.open(result.url, "_blank");
+    } catch {
+      setRwgpsStatus("error");
+    }
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
@@ -103,16 +127,40 @@ export default function RouteDetail({ route, onBack }: RouteDetailProps) {
             )}
           </div>
 
-          {/* GPX download */}
-          <a
-            href={getFullGpxUrl(route.gpx_url)}
-            download
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
-          >
-            <Download className="w-4 h-4" /> Download GPX File
-          </a>
+          {/* GPX download + RideWithGPS export */}
+          <div className="flex flex-col gap-2">
+            <a
+              href={getFullGpxUrl(route.gpx_url)}
+              download
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:opacity-90 transition-opacity"
+            >
+              <Download className="w-4 h-4" /> Download GPX File
+            </a>
+            <button
+              onClick={handleExportToRwgps}
+              disabled={rwgpsStatus === "loading"}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border bg-background text-foreground font-medium hover:bg-muted transition-colors disabled:opacity-60"
+            >
+              {rwgpsStatus === "loading" ? (
+                <span className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
+              ) : rwgpsStatus === "success" ? (
+                <CheckCircle2 className="w-4 h-4 text-green-500" />
+              ) : (
+                <ExternalLink className="w-4 h-4" />
+              )}
+              {rwgpsStatus === "loading" ? "Exporting..." : rwgpsStatus === "success" ? "Saved to RideWithGPS" : "Export to RideWithGPS"}
+            </button>
+            {rwgpsStatus === "error" && (
+              <p className="text-xs text-red-500 text-center">Export failed — check RideWithGPS credentials.</p>
+            )}
+            {rwgpsStatus === "success" && rwgpsUrl && (
+              <a href={rwgpsUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-center text-primary hover:underline">
+                View on RideWithGPS →
+              </a>
+            )}
+          </div>
         </div>
       </div>
 

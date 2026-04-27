@@ -93,6 +93,9 @@ export const api = {
   getMapboxUsage: () =>
     request<{ date: string; count: number; limit: number; remaining: number }>("/mapbox-usage"),
 
+  exportToRwgps: (routeId: string): Promise<{ success: boolean; url: string }> =>
+    request(`/rwgps/export/${routeId}`, { method: "POST" }),
+
   getPois: (
     south: number,
     west: number,
