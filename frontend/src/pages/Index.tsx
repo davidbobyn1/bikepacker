@@ -4,6 +4,7 @@ import { Compass, Loader2, Sparkles, MapPin, Clock, Ruler, Target, Layers, Alert
 import type { RouteOption, RiderProfile, TripPreferences, TripContext } from "../types/route";
 import { api } from "../services/api";
 import TripPreferencesPanel from "../components/planner/TripPreferencesPanel";
+import PlanningProgress from "../components/planner/PlanningProgress";
 import RouteCard from "../components/results/RouteCard";
 import RouteDetail from "../components/route/RouteDetail";
 import RouteMap from "../components/route/RouteMap";
@@ -183,7 +184,8 @@ export default function Index() {
           {/* RESULTS */}
           {view === "results" && (
             <motion.div key="results" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-6">
-              {tripContext && (
+              {loading && <PlanningProgress estimatedDurationMs={40000} />}
+              {!loading && tripContext && (
                 <div className="bg-card border border-border rounded-xl p-5">
                   <div className="flex items-center gap-2 mb-3">
                     <Sparkles className="w-4 h-4 text-primary" />
@@ -203,7 +205,7 @@ export default function Index() {
                 </div>
               )}
 
-              {compareMode && routes.length > 0 && (
+              {!loading && compareMode && routes.length > 0 && (
                 <div className="rounded-xl overflow-hidden border border-border">
                   <RouteMap routes={routes} activeRouteId={activeRouteId} compareMode={true} onRouteClick={handleSelectRoute} className="h-96" />
                   <div className="bg-card px-4 py-2 flex items-center gap-4 text-xs text-muted-foreground border-t border-border">
@@ -219,17 +221,21 @@ export default function Index() {
                   </div>
                 </div>
               )}
-
-              <div>
-                <h2 className="text-2xl font-serif text-foreground">We found {routes.length} route options</h2>
-                <p className="text-sm text-muted-foreground mt-1">Each represents a different approach to your trip.</p>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {routes.map((route, i) => (
-                  <RouteCard key={route.id} route={route} index={i} onViewDetails={handleViewDetails} />
-                ))}
-              </div>
+              {!loading && (
+                <>
+                  <div>
+                    <h2 className="text-2xl font-serif text-foreground">We found {routes.length} route options</h2>
+                    <p className="text-sm text-muted-foreground mt-1">Each represents a different approach to your trip.</p>
+                  </div>
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {routes.map((route, i) => (
+                      <RouteCard key={route.id} route={route} index={i} onViewDetails={handleViewDetails}
+                        isBestFit={i === 0}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </motion.div>
           )}
 
