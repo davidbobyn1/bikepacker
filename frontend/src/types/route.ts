@@ -56,6 +56,11 @@ export interface TerrainNote {
   severity: "info" | "caution" | "warning";
 }
 
+export interface ElevationPoint {
+  km: number;
+  elevation_m: number;
+}
+
 export interface DaySegment {
   day: number;
   title: string;
@@ -70,6 +75,8 @@ export interface DaySegment {
   overnight_area?: OvernightArea;
   water_points: string[];
   grocery_points: string[];
+  // TODO: wire to real elevation API — currently synthesised from climbing_m + distance_km
+  elevation_points?: ElevationPoint[];
 }
 
 export interface ScoreBreakdown {

@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import RouteMap from "./RouteMap";
 import ConfidenceBadge from "./ConfidenceBadge";
+import ElevationProfile from "./ElevationProfile";
+import WeatherStrip from "./WeatherStrip";
 import type { RouteOption, TerrainNote } from "../../types/route";
 import { api } from "../../services/api";
 
@@ -279,6 +281,17 @@ export default function RouteDetail({ route, onBack, onSave, isSaved }: RouteDet
         </div>
       </Section>
 
+      {/* ── WEATHER FORECAST ── */}
+      {route.geometry && route.geometry.length > 0 && (
+        <Section title="Weather Forecast" icon={<span className="text-lg">☀️</span>}>
+          <WeatherStrip
+            lat={route.geometry[0][0]}
+            lon={route.geometry[0][1]}
+            days={route.estimated_days}
+          />
+        </Section>
+      )}
+
       {/* ── DAY-BY-DAY ITINERARY ── */}
       <Section title="Day-by-Day Itinerary" icon={<MapPin className="w-5 h-5 text-primary" />}>
         <div className="space-y-3">
@@ -337,6 +350,13 @@ export default function RouteDetail({ route, onBack, onSave, isSaved }: RouteDet
                         ))}
                       </div>
                     )}
+
+                    {/* Per-day elevation profile */}
+                    <ElevationProfile
+                      elevationPoints={seg.elevation_points}
+                      distanceKm={seg.distance_km}
+                      climbingM={seg.climbing_m}
+                    />
 
                     {/* Terrain notes */}
                     {seg.terrain_notes.length > 0 && (
