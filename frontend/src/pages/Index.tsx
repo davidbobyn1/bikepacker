@@ -315,7 +315,7 @@ export default function Index() {
         <RouteCompareTable
           routes={compareRoutes}
           onClose={() => setCompareRoutes(null)}
-          onViewDetails={(route) => { setCompareRoutes(null); handleViewDetails(route); }}
+          onOpen={(route: RouteOption) => { setCompareRoutes(null); handleViewDetails(route); }}
         />
       )}
     </div>
