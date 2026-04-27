@@ -1,12 +1,15 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Compass, Loader2, Sparkles, MapPin, Clock, Ruler, Target, Layers, AlertCircle } from "lucide-react";
+import { Compass, Loader2, Sparkles, MapPin, Clock, Ruler, Target, Layers, AlertCircle, Bookmark } from "lucide-react";
 import type { RouteOption, RiderProfile, TripPreferences, TripContext } from "../types/route";
 import { api } from "../services/api";
 import TripPreferencesPanel from "../components/planner/TripPreferencesPanel";
 import RouteCard from "../components/results/RouteCard";
 import RouteDetail from "../components/route/RouteDetail";
 import RouteMap from "../components/route/RouteMap";
+import SavedRoutesList from "../components/saved/SavedRoutesList";
+import RouteCompareTable from "../components/saved/RouteCompareTable";
+import { useSavedRoutes } from "../hooks/useSavedRoutes";
 
 type View = "planner" | "results" | "detail";
 
@@ -20,6 +23,9 @@ export default function Index() {
   const [activeRouteId, setActiveRouteId] = useState<string | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [tripContext, setTripContext] = useState<TripContext | null>(null);
+  const [showSaved, setShowSaved] = useState(false);
+  const [compareRoutes, setCompareRoutes] = useState<RouteOption[] | null>(null);
+  const { savedRoutes, saveRoute, removeRoute, isRouteSaved, renameRoute } = useSavedRoutes();
 
   const [riderProfile, setRiderProfile] = useState<RiderProfile>({
     fitness: "intermediate",
@@ -84,27 +90,39 @@ export default function Index() {
             <Compass className="w-5 h-5 text-primary" />
             Bikepacker
           </button>
-          {view !== "planner" && (
-            <div className="flex items-center gap-3">
-              {view === "results" && routes.length > 1 && (
-                <button
-                  onClick={() => setCompareMode((v) => !v)}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    compareMode ? "bg-primary text-white" : "bg-secondary text-foreground hover:opacity-80"
-                  }`}
-                >
-                  <Layers className="w-3.5 h-3.5" />
-                  {compareMode ? "Comparing" : "Compare Routes"}
-                </button>
+          <div className="flex items-center gap-3">
+            {view === "results" && routes.length > 1 && (
+              <button
+                onClick={() => setCompareMode((v) => !v)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  compareMode ? "bg-primary text-white" : "bg-secondary text-foreground hover:opacity-80"
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                {compareMode ? "Comparing" : "Compare Routes"}
+              </button>
+            )}
+            <button
+              onClick={() => setShowSaved(true)}
+              className="relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary text-foreground hover:opacity-80 transition-opacity"
+            >
+              <Bookmark className="w-3.5 h-3.5" />
+              Saved
+              {savedRoutes.length > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-primary text-white text-[10px] flex items-center justify-center font-bold">
+                  {savedRoutes.length}
+                </span>
               )}
+            </button>
+            {view !== "planner" && (
               <button
                 onClick={() => { setView("planner"); setSelectedRoute(null); setError(null); }}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 New trip
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </header>
 
@@ -227,11 +245,41 @@ export default function Index() {
                 window.dispatchEvent(new Event("resize"));
               }}
             >
-              <RouteDetail route={selectedRoute} onBack={() => { setView("results"); setSelectedRoute(null); }} />
+              <RouteDetail
+                route={selectedRoute}
+                onBack={() => { setView("results"); setSelectedRoute(null); }}
+                onSave={() => saveRoute(selectedRoute)}
+                isSaved={isRouteSaved(selectedRoute.id)}
+              />
             </motion.div>
           )}
         </AnimatePresence>
       </main>
+
+      {/* Saved Routes Panel */}
+      <AnimatePresence>
+        {showSaved && (
+          <SavedRoutesList
+            savedRoutes={savedRoutes}
+            onOpen={(route) => { handleViewDetails(route); }}
+            onRemove={removeRoute}
+            onRename={renameRoute}
+            onClose={() => setShowSaved(false)}
+            onCompare={(routes) => { setCompareRoutes(routes); setShowSaved(false); }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Route Comparison Modal */}
+      <AnimatePresence>
+        {compareRoutes && compareRoutes.length >= 2 && (
+          <RouteCompareTable
+            routes={compareRoutes}
+            onClose={() => setCompareRoutes(null)}
+            onOpen={(route) => { handleViewDetails(route); setCompareRoutes(null); }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

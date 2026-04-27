@@ -4,7 +4,7 @@ import {
   ArrowLeft, Download, Mountain, Ruler, Percent, Clock,
   ShoppingCart, Droplets, Building, AlertTriangle, Info, MapPin,
   Tent, Hotel, CheckCircle2, Eye, Shield, Flame, ChevronRight,
-  Moon, ArrowUpDown, Zap, ExternalLink
+  Moon, ArrowUpDown, Zap, ExternalLink, Bookmark, BookmarkCheck
 } from "lucide-react";
 import RouteMap from "./RouteMap";
 import ConfidenceBadge from "./ConfidenceBadge";
@@ -23,6 +23,8 @@ const getFullGpxUrl = (gpxUrl: string) => {
 interface RouteDetailProps {
   route: RouteOption;
   onBack: () => void;
+  onSave?: () => void;
+  isSaved?: boolean;
 }
 
 const archetypeIcons: Record<string, React.ReactNode> = {
@@ -44,7 +46,7 @@ const getRouteId = (gpxUrl: string): string => {
   return parts[parts.length - 1] || "";
 };
 
-export default function RouteDetail({ route, onBack }: RouteDetailProps) {
+export default function RouteDetail({ route, onBack, onSave, isSaved }: RouteDetailProps) {
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
   const [rwgpsStatus, setRwgpsStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [rwgpsUrl, setRwgpsUrl] = useState<string | null>(null);
@@ -65,10 +67,21 @@ export default function RouteDetail({ route, onBack }: RouteDetailProps) {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-      {/* Back nav */}
-      <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Back to route options
-      </button>
+      {/* Back nav + Save */}
+      <div className="flex items-center justify-between">
+        <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+          <ArrowLeft className="w-4 h-4" /> Back to route options
+        </button>
+        {onSave && (
+          <button
+            onClick={onSave}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary text-foreground hover:opacity-80 transition-opacity"
+          >
+            {isSaved ? <BookmarkCheck className="w-3.5 h-3.5 text-primary" /> : <Bookmark className="w-3.5 h-3.5" />}
+            {isSaved ? "Saved" : "Save route"}
+          </button>
+        )}
+      </div>
 
       {/* Hero header */}
       <div className="flex items-start gap-4">
