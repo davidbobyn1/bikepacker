@@ -24,7 +24,14 @@ OVERPASS_MIRRORS = [
 ]
 
 MAX_PER_TYPE = 15   # cap per type to keep map readable
-MAX_DIST_KM = 0.75  # only show POIs within 750m of the route line
+MAX_DIST_KM = 0.75  # default: only show POIs within 750m of the route line
+# Campsites are destinations, not roadside amenities -- use a wider search radius
+# so riders can see overnight options even if the route doesn't pass directly by them.
+MAX_DIST_KM_BY_TYPE: dict[str, float] = {
+    "water": 0.75,
+    "bike_shop": 1.5,
+    "campsite": 5.0,   # 5 km -- campsites are worth a short detour
+}
 
 
 def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -146,9 +153,11 @@ async def get_pois(
             continue
 
         # Filter to POIs near the route line
+        # Use a wider radius for campsites since they are destinations, not roadside amenities.
         if route_coords:
+            max_dist = MAX_DIST_KM_BY_TYPE.get(poi_type, MAX_DIST_KM)
             dist = _min_dist_to_route(float(lat), float(lon), route_coords)
-            if dist > MAX_DIST_KM:
+            if dist > max_dist:
                 continue
 
         if counts.get(poi_type, 0) >= MAX_PER_TYPE:

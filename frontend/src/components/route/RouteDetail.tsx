@@ -48,21 +48,14 @@ const getRouteId = (gpxUrl: string): string => {
 
 export default function RouteDetail({ route, onBack, onSave, isSaved }: RouteDetailProps) {
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
-  const [rwgpsStatus, setRwgpsStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [rwgpsUrl, setRwgpsUrl] = useState<string | null>(null);
 
-  const handleExportToRwgps = async () => {
-    const routeId = getRouteId(route.gpx_url);
-    if (!routeId) return;
-    setRwgpsStatus("loading");
-    try {
-      const result = await api.exportToRwgps(routeId);
-      setRwgpsUrl(result.url);
-      setRwgpsStatus("success");
-      window.open(result.url, "_blank");
-    } catch {
-      setRwgpsStatus("error");
-    }
+  const handleExportToRwgps = () => {
+    // Open RideWithGPS route builder with the GPX URL pre-filled.
+    // RWGPS supports importing a GPX URL directly via their import page.
+    const gpxUrl = getFullGpxUrl(route.gpx_url);
+    if (!gpxUrl) return;
+    const rwgpsImportUrl = `https://ridewithgps.com/routes/new?url=${encodeURIComponent(gpxUrl)}`;
+    window.open(rwgpsImportUrl, "_blank");
   };
 
   return (
@@ -153,26 +146,16 @@ export default function RouteDetail({ route, onBack, onSave, isSaved }: RouteDet
             </a>
             <button
               onClick={handleExportToRwgps}
-              disabled={rwgpsStatus === "loading"}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border bg-background text-foreground font-medium hover:bg-muted transition-colors disabled:opacity-60"
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border bg-background text-foreground font-medium hover:bg-muted transition-colors"
             >
-              {rwgpsStatus === "loading" ? (
-                <span className="animate-spin w-4 h-4 border-2 border-current border-t-transparent rounded-full" />
-              ) : rwgpsStatus === "success" ? (
-                <CheckCircle2 className="w-4 h-4 text-green-500" />
-              ) : (
-                <ExternalLink className="w-4 h-4" />
-              )}
-              {rwgpsStatus === "loading" ? "Exporting..." : rwgpsStatus === "success" ? "Saved to RideWithGPS" : "Export to RideWithGPS"}
+              {/* RideWithGPS logo SVG */}
+              <svg width="18" height="18" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="32" cy="32" r="32" fill="#FF6B00"/>
+                <path d="M20 44 L32 20 L44 44" stroke="white" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                <circle cx="32" cy="20" r="4" fill="white"/>
+              </svg>
+              Open in RideWithGPS
             </button>
-            {rwgpsStatus === "error" && (
-              <p className="text-xs text-red-500 text-center">Export failed — check RideWithGPS credentials.</p>
-            )}
-            {rwgpsStatus === "success" && rwgpsUrl && (
-              <a href={rwgpsUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-center text-primary hover:underline">
-                View on RideWithGPS →
-              </a>
-            )}
           </div>
         </div>
       </div>

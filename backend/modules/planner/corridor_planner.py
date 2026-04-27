@@ -289,6 +289,18 @@ def plan_routes(
     trip_days = spec.trip_days.min
     daily_km = spec.rider_profile.comfort_daily_km
 
+    # Guard: target_km must be at least trip_days x daily_km.
+    # If the LLM under-parsed the distance (e.g. user said "3 days" without specifying km),
+    # the spec may have a small total_distance_km. Fall back to days x daily_km so the
+    # corridor is sized correctly for the number of days requested.
+    min_target = trip_days * daily_km
+    if target_km < min_target:
+        logger.warning(
+            "target_km=%.0f < trip_days(%d) x daily_km(%.0f)=%.0f -- using %.0f km",
+            target_km, trip_days, daily_km, min_target, min_target,
+        )
+        target_km = min_target
+
     logger.info(
         "Planning routes: origin=%s, target=%.0f km, %d days, %.0f km/day",
         origin, target_km, trip_days, daily_km,
