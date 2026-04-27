@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft, Download, Mountain, Ruler, Percent, Clock,
+  ArrowLeft, Download, Loader2, Mountain, Ruler, Percent, Clock,
   ShoppingCart, Droplets, Building, AlertTriangle, Info, MapPin,
   Tent, Hotel, CheckCircle2, Eye, Shield, Flame, ChevronRight,
   Moon, ArrowUpDown, Zap, ExternalLink, Bookmark, BookmarkCheck
@@ -48,14 +48,36 @@ const getRouteId = (gpxUrl: string): string => {
 
 export default function RouteDetail({ route, onBack, onSave, isSaved }: RouteDetailProps) {
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
+  const [rwgpsLoading, setRwgpsLoading] = useState(false);
+  const [rwgpsError, setRwgpsError] = useState<string | null>(null);
 
-  const handleExportToRwgps = () => {
-    // Open RideWithGPS route builder with the GPX URL pre-filled.
-    // RWGPS supports importing a GPX URL directly via their import page.
-    const gpxUrl = getFullGpxUrl(route.gpx_url);
-    if (!gpxUrl) return;
-    const rwgpsImportUrl = `https://ridewithgps.com/routes/new?url=${encodeURIComponent(gpxUrl)}`;
-    window.open(rwgpsImportUrl, "_blank");
+  const handleExportToRwgps = async () => {
+    const routeId = getRouteId(route.gpx_url);
+    if (!routeId) {
+      setRwgpsError("Route ID not found. Please regenerate the route and try again.");
+      return;
+    }
+    setRwgpsLoading(true);
+    setRwgpsError(null);
+    try {
+      const data = await api.exportToRwgps(routeId);
+      if (data.url) {
+        window.open(data.url, "_blank");
+      }
+    } catch (err: any) {
+      // Parse the error message from the API response if possible
+      let msg = "Export failed. Please try again.";
+      if (err?.message?.includes("503")) {
+        msg = "RideWithGPS export is not configured. Download the GPX file and import it manually at ridewithgps.com/routes/new.";
+      } else if (err?.message?.includes("404")) {
+        msg = "Route has expired — please regenerate your trip and try again.";
+      } else if (err?.message?.includes("502")) {
+        msg = "RideWithGPS API error. Try downloading the GPX and importing manually.";
+      }
+      setRwgpsError(msg);
+    } finally {
+      setRwgpsLoading(false);
+    }
   };
 
   return (
@@ -146,16 +168,23 @@ export default function RouteDetail({ route, onBack, onSave, isSaved }: RouteDet
             </a>
             <button
               onClick={handleExportToRwgps}
-              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border bg-background text-foreground font-medium hover:bg-muted transition-colors"
+              disabled={rwgpsLoading}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border bg-background text-foreground font-medium hover:bg-muted transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {/* RideWithGPS logo SVG */}
-              <svg width="18" height="18" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="32" cy="32" r="32" fill="#FF6B00"/>
-                <path d="M20 44 L32 20 L44 44" stroke="white" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                <circle cx="32" cy="20" r="4" fill="white"/>
-              </svg>
-              Open in RideWithGPS
+              {rwgpsLoading ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="32" cy="32" r="32" fill="#FF6B00"/>
+                  <path d="M20 44 L32 20 L44 44" stroke="white" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                  <circle cx="32" cy="20" r="4" fill="white"/>
+                </svg>
+              )}
+              {rwgpsLoading ? "Exporting…" : "Export to RideWithGPS"}
             </button>
+            {rwgpsError && (
+              <p className="text-xs text-destructive leading-snug px-1">{rwgpsError}</p>
+            )}
           </div>
         </div>
       </div>
