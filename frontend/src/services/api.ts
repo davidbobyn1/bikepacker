@@ -96,6 +96,12 @@ export const api = {
   exportToRwgps: (routeId: string): Promise<{ success: boolean; url: string }> =>
     request(`/rwgps/export/${routeId}`, { method: "POST" }),
 
+  refineRoute: (route: RouteOption, instruction: string, conversationHistory: { role: string; content: string }[] = []) =>
+    request<{ reasoning: string; proposed_changes: { description: string; impact: string }[]; feasibility: string; follow_up_prompt?: string }>(
+      "/refine",
+      { method: "POST", body: JSON.stringify({ route, instruction, conversation_history: conversationHistory }) }
+    ),
+
   getPois: (
     south: number,
     west: number,

@@ -169,6 +169,27 @@ def _map_day_segment(seg, narrative_day: Optional[dict] = None) -> dict:
     )
     key_advice = narrative_day.get("key_advice", "") if narrative_day else ""
 
+    # Structured water and grocery points from AI narrative
+    raw_water = narrative_day.get("water_points", []) if narrative_day else []
+    raw_grocery = narrative_day.get("grocery_points", []) if narrative_day else []
+
+    def _normalise_points(raw: list) -> list:
+        """Accept both plain strings and {name, distance_from_day_start_km, confidence} dicts."""
+        out = []
+        for item in raw:
+            if isinstance(item, str):
+                out.append({"name": item, "distance_from_day_start_km": None, "confidence": "unverified"})
+            elif isinstance(item, dict):
+                out.append({
+                    "name": item.get("name", "Unknown"),
+                    "distance_from_day_start_km": item.get("distance_from_day_start_km"),
+                    "confidence": item.get("confidence", "likely"),
+                })
+        return out
+
+    water_points = _normalise_points(raw_water)
+    grocery_points = _normalise_points(raw_grocery)
+
     return {
         "day": seg.day_number,
         "title": headline,
@@ -181,8 +202,8 @@ def _map_day_segment(seg, narrative_day: Optional[dict] = None) -> dict:
         "highlights": [],
         "terrain_notes": [],
         "overnight_area": overnight_area,
-        "water_points": [],
-        "grocery_points": [],
+        "water_points": water_points,
+        "grocery_points": grocery_points,
     }
 
 
@@ -206,15 +227,14 @@ def _map_route_to_response(
     ]
 
     overnight_areas = []
-    for seg in route.day_segments[:-1]:
-        if not seg.overnight_name:
-            continue
+    for seg in route.day_segments[:-1]:  # skip last day (return to origin)
         otype = seg.overnight_type or "campsite"
-        coords = list(seg.overnight_coord) if seg.overnight_coord else [0, 0]
+        # Use overnight_coord if available; fall back to day end_coord (always set)
+        coords = list(seg.overnight_coord) if seg.overnight_coord else list(seg.end_coord)
 
-        # Derive a booking/info note based on overnight type
+        # Booking/info note per overnight type
         if otype in ("campsite", "dispersed"):
-            booking_note = "No booking required — dispersed camping area. Check local regulations before departure."
+            booking_note = "No booking required — dispersed camping. Check local regulations before departure."
             booking_url = None
         elif otype in ("hotel", "motel"):
             booking_note = "Hotel accommodation — search booking.com or hotels.com for availability."
@@ -225,12 +245,12 @@ def _map_route_to_response(
 
         option = {
             "id": f"overnight-{seg.day_number}",
-            "name": seg.overnight_name,
+            "name": seg.overnight_name or f"Night {seg.day_number} camp",
             "type": otype,
             "distance_from_route_km": 0.0,
             "description": f"Night {seg.day_number} {otype.replace('_', ' ')} stop",
             "amenities": (
-                ["Water", "Toilets"] if otype == "campsite"
+                ["Water (check ahead)", "Primitive toilets"] if otype in ("campsite", "dispersed")
                 else ["Wifi", "Shower", "Parking"] if otype in ("hotel", "motel")
                 else []
             ),
@@ -241,7 +261,7 @@ def _map_route_to_response(
             option["booking_url"] = booking_url
 
         overnight_areas.append({
-            "name": seg.overnight_name,
+            "name": seg.overnight_name or f"Night {seg.day_number} camp",
             "description": f"Night {seg.day_number} overnight stop",
             "coordinates": coords,
             "options": [option],

@@ -159,11 +159,13 @@ function ElevationProfile({
   elevationData,
   onPositionClick,
   onHover,
+  mapHoverIdx,
 }: {
   route: RouteOption | null;
   elevationData: number[] | null;
   onPositionClick: (coord: [number, number]) => void;
   onHover: (coord: [number, number] | null) => void;
+  mapHoverIdx: number | null;
 }) {
   if (!route || !route.geometry || route.geometry.length < 2) return null;
 
@@ -229,6 +231,17 @@ function ElevationProfile({
       >
         <path d={areaD} fill={`${colors.line}22`} />
         <path d={pathD} fill="none" stroke={colors.line} strokeWidth="2" />
+        {mapHoverIdx !== null && (() => {
+          const x = (mapHoverIdx / (n - 1)) * W;
+          const h = heights[mapHoverIdx];
+          const y = H - ((h - minH) / range) * H;
+          return (
+            <>
+              <line x1={x} y1={0} x2={x} y2={H} stroke="#fff" strokeWidth="1" strokeOpacity={0.6} strokeDasharray="3 2" />
+              <circle cx={x} cy={y} r={3} fill={colors.line} stroke="#fff" strokeWidth="1.5" />
+            </>
+          );
+        })()}
       </svg>
     </div>
   );
@@ -250,6 +263,8 @@ export default function RouteMap({
   const hoverMarkerRef = useRef<maplibregl.Marker | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [elevationData, setElevationData] = useState<number[] | null>(null);
+  const [elevHoverIdx, setElevHoverIdx] = useState<number | null>(null);
+  const elevHoverIdxRef = useRef<number | null>(null);
   const [pois, setPois] = useState<PoiItem[]>([]);
   const [visibleTypes, setVisibleTypes] = useState<Set<PoiItem["type"]>>(
     new Set(["water", "campsite", "bike_shop"] as PoiItem["type"][])
@@ -532,11 +547,45 @@ export default function RouteMap({
         route.overnight_areas?.forEach((area, i) => {
           const [lat, lon] = area.coordinates;
           if (!lat || !lon) return;
+
+          // Pick icon based on overnight type from matching day segment
+          const seg = route.day_segments?.[i];
+          const firstOption = seg?.overnight_area?.options?.[0];
+          const oType = firstOption?.type ?? "campsite";
+          const isHotel = oType === "hotel" || oType === "motel";
+          const icon = isHotel ? "🏨" : "⛺";
+
+          // Pill marker: [N1 ⛺]
           const el = document.createElement("div");
-          el.style.cssText = `background:#1e293b;border:2px solid ${colors.line};border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.45);cursor:pointer;`;
-          el.textContent = "🏕";
-          const popup = new maplibregl.Popup({ offset: 16, closeButton: false }).setHTML(
-            `<div style="font-size:12px;padding:4px 2px"><strong>Night ${i + 1}</strong><br/>${area.name}</div>`
+          el.style.cssText = [
+            "display:flex",
+            "align-items:center",
+            "gap:3px",
+            `background:${colors.line}`,
+            "color:#fff",
+            "font-size:11px",
+            "font-weight:700",
+            "font-family:system-ui,sans-serif",
+            "padding:3px 8px 3px 7px",
+            "border-radius:99px",
+            "border:2px solid #fff",
+            "box-shadow:0 2px 8px rgba(0,0,0,.55)",
+            "cursor:pointer",
+            "white-space:nowrap",
+            "user-select:none",
+          ].join(";");
+          el.innerHTML = `<span>N${i + 1}</span><span style="font-size:13px;line-height:1;margin-left:2px">${icon}</span>`;
+
+          // Rich popup
+          const optCount = area.options?.length ?? (seg?.overnight_area?.options?.length ?? 0);
+          const optLabel = optCount > 1
+            ? `${optCount} options · tap card for details`
+            : isHotel ? "Hotel / lodging" : oType === "dispersed" ? "Dispersed camping" : "Campsite";
+          const popup = new maplibregl.Popup({ offset: 18, closeButton: false, maxWidth: "220px" }).setHTML(
+            `<div style="font-family:system-ui,sans-serif;font-size:12px;padding:2px 0">`
+            + `<div style="font-weight:700;font-size:13px;margin-bottom:3px">Night ${i + 1} — ${area.name}</div>`
+            + `<div style="color:#64748b;font-size:11px">${optLabel}</div>`
+            + `</div>`
           );
           markersRef.current.push(
             new maplibregl.Marker({ element: el })
@@ -561,6 +610,42 @@ export default function RouteMap({
     }
   // basemap included: setStyle() wipes custom layers, so we must redraw routes after a swap
   }, [mapReady, routes, effectiveActiveId, compareMode, onRouteClick, activeRoute, basemap]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Map mousemove → highlight position on elevation strip ─────────────────
+  useEffect(() => {
+    if (!mapReady || !mapRef.current || !activeRoute?.geometry?.length) return;
+    const map = mapRef.current;
+    const geom = activeRoute.geometry; // [lat, lon][]
+    const n = geom.length;
+
+    const onMove = (e: maplibregl.MapMouseEvent) => {
+      const { lng, lat } = e.lngLat;
+      // Find nearest geometry index using haversine approximation
+      let bestIdx = 0;
+      let bestDist = Infinity;
+      const step = Math.max(1, Math.floor(n / 300)); // sample for perf
+      for (let i = 0; i < n; i += step) {
+        const [glat, glon] = geom[i];
+        const d = (glat - lat) ** 2 + (glon - lng) ** 2;
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+      if (elevHoverIdxRef.current !== bestIdx) {
+        elevHoverIdxRef.current = bestIdx;
+        setElevHoverIdx(bestIdx);
+      }
+    };
+    const onLeave = () => {
+      elevHoverIdxRef.current = null;
+      setElevHoverIdx(null);
+    };
+
+    map.on("mousemove", onMove);
+    map.on("mouseleave", onLeave);
+    return () => {
+      map.off("mousemove", onMove);
+      map.off("mouseleave", onLeave);
+    };
+  }, [mapReady, activeRoute?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Elevation click → fly to ───────────────────────────────────────────────
   const flyTo = useCallback(([lat, lon]: [number, number]) => {
@@ -665,6 +750,7 @@ export default function RouteMap({
           elevationData={elevationData}
           onPositionClick={flyTo}
           onHover={handleElevHover}
+          mapHoverIdx={elevHoverIdx}
         />
       )}
     </div>

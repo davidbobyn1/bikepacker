@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import RouteMap from "./RouteMap";
 import ConfidenceBadge from "./ConfidenceBadge";
+import ElevationProfile from "./ElevationProfile";
+import WeatherStrip from "./WeatherStrip";
+import RefineRoutePanel from "./RefineRoutePanel";
 import type { RouteOption, TerrainNote } from "../../types/route";
 import { api } from "../../services/api";
 
@@ -154,8 +157,8 @@ export default function RouteDetail({ route, onBack, onSave, isSaved, onShare }:
         <div className="lg:w-2/5 space-y-4">
           {/* Quick stats */}
           <div className="grid grid-cols-2 gap-2">
-            <StatBox icon={<Ruler className="w-4 h-4" />} label="Total Distance" value={`${route.total_distance_km} km`} />
-            <StatBox icon={<Mountain className="w-4 h-4" />} label="Total Climbing" value={`${route.total_climbing_m} m`} />
+            <StatBox icon={<Ruler className="w-4 h-4" />} label="Total Distance" value={`${route.total_distance_km.toLocaleString()} km`} />
+            <StatBox icon={<Mountain className="w-4 h-4" />} label="Total Climbing" value={`${Math.round(route.total_climbing_m).toLocaleString()} m`} />
             <StatBox icon={<Percent className="w-4 h-4" />} label="Gravel Ratio" value={`${Math.round(route.gravel_ratio * 100)}%`} />
             <StatBox icon={<Clock className="w-4 h-4" />} label="Est. Ride Time" value={`${route.day_segments.reduce((s, d) => s + d.estimated_hours, 0).toFixed(0)}h`} />
           </div>
@@ -300,6 +303,17 @@ export default function RouteDetail({ route, onBack, onSave, isSaved, onShare }:
         </div>
       </Section>
 
+      {/* ── WEATHER FORECAST ── */}
+      {route.geometry && route.geometry.length > 0 && (
+        <Section title="Weather Forecast" icon={<span className="text-lg">☀️</span>}>
+          <WeatherStrip
+            lat={route.geometry[0][0]}
+            lon={route.geometry[0][1]}
+            days={route.estimated_days}
+          />
+        </Section>
+      )}
+
       {/* ── DAY-BY-DAY ITINERARY ── */}
       <Section title="Day-by-Day Itinerary" icon={<MapPin className="w-5 h-5 text-primary" />}>
         <div className="space-y-3">
@@ -318,9 +332,9 @@ export default function RouteDetail({ route, onBack, onSave, isSaved, onShare }:
                     <div>
                       <h3 className="text-base font-serif text-foreground">{seg.title}</h3>
                       <div className="flex items-center gap-2 mt-0.5 text-xs text-muted-foreground">
-                        <span>{seg.distance_km} km</span>
+                        <span>{seg.distance_km.toLocaleString()} km</span>
                         <span>·</span>
-                        <span>{seg.climbing_m} m↑</span>
+                        <span>{Math.round(seg.climbing_m).toLocaleString()} m↑</span>
                         <span>·</span>
                         <span>{Math.round(seg.gravel_ratio * 100)}% gravel</span>
                         <span>·</span>
@@ -358,6 +372,13 @@ export default function RouteDetail({ route, onBack, onSave, isSaved, onShare }:
                         ))}
                       </div>
                     )}
+
+                    {/* Per-day elevation profile */}
+                    <ElevationProfile
+                      elevationPoints={seg.elevation_points}
+                      distanceKm={seg.distance_km}
+                      climbingM={seg.climbing_m}
+                    />
 
                     {/* Terrain notes */}
                     {seg.terrain_notes.length > 0 && (
@@ -449,6 +470,9 @@ export default function RouteDetail({ route, onBack, onSave, isSaved, onShare }:
           </ul>
         </Section>
       )}
+
+      {/* ── REFINE THIS ROUTE ── */}
+      <RefineRoutePanel route={route} />
 
       {/* Bottom GPX CTA */}
       <div className="flex justify-center pb-4">

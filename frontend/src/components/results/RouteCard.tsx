@@ -67,7 +67,6 @@ interface RouteCardProps {
 export default function RouteCard({ route, index, onViewDetails, isBestFit }: RouteCardProps) {
   const style = ARCHETYPE_STYLES[route.archetype as Archetype] ?? ARCHETYPE_STYLES.scenic;
   const topFitReasons = route.rider_fit_reasons.slice(0, 2);
-  const topTradeoff = route.tradeoffs[0];
   const gpxHref = getFullGpxUrl(route.gpx_url);
 
   return (
@@ -105,8 +104,8 @@ export default function RouteCard({ route, index, onViewDetails, isBestFit }: Ro
 
         {/* Metrics strip */}
         <div className="grid grid-cols-4 gap-2 pt-1">
-          <Metric icon={<Ruler className="w-3 h-3" />}   label="km"    value={route.total_distance_km} />
-          <Metric icon={<Mountain className="w-3 h-3" />} label="climb" value={`${route.total_climbing_m}m`} />
+          <Metric icon={<Ruler className="w-3 h-3" />}   label="km"    value={route.total_distance_km.toLocaleString()} />
+          <Metric icon={<Mountain className="w-3 h-3" />} label="climb" value={`${Math.round(route.total_climbing_m).toLocaleString()}m`} />
           <Metric icon={<Percent className="w-3 h-3" />}  label="gravel" value={`${Math.round(route.gravel_ratio * 100)}%`} />
           <Metric icon={<Clock className="w-3 h-3" />}    label="days"  value={route.estimated_days} />
         </div>
@@ -114,7 +113,7 @@ export default function RouteCard({ route, index, onViewDetails, isBestFit }: Ro
 
       {/* Body */}
       <div className="px-5 sm:px-6 pt-4 flex-1 flex flex-col">
-        <p className="text-sm text-muted-foreground leading-relaxed line-clamp-3">{route.summary}</p>
+        <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">{route.summary}</p>
 
         {/* Logistics badges */}
         <div className="flex flex-wrap gap-1.5 pt-3">
@@ -123,9 +122,9 @@ export default function RouteCard({ route, index, onViewDetails, isBestFit }: Ro
           <LogisticsBadge icon={<Building className="w-3 h-3" />}     label="Hotel"   value={`${route.hotel_fallback_distance_km} km`} good={route.hotel_fallback_distance_km <= 2} />
         </div>
 
-        {/* Rider fit preview */}
+        {/* Rider fit preview — one line only to keep cards compact */}
         <div className="space-y-1.5 pt-3">
-          {topFitReasons.map((reason, i) => (
+          {topFitReasons.slice(0, 1).map((reason, i) => (
             <div key={i} className="flex items-start gap-1.5 text-xs">
               {reason.icon_type === "check"   && <CheckCircle2 className="w-3.5 h-3.5 text-trail flex-shrink-0 mt-0.5" />}
               {reason.icon_type === "warning" && <AlertTriangle className="w-3.5 h-3.5 text-camp flex-shrink-0 mt-0.5" />}
@@ -134,17 +133,6 @@ export default function RouteCard({ route, index, onViewDetails, isBestFit }: Ro
             </div>
           ))}
         </div>
-
-        {/* Key tradeoff */}
-        {topTradeoff && (
-          <div className="pt-3">
-            <div className="bg-muted/50 rounded-lg px-3 py-2">
-              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{topTradeoff.label}</span>
-              <div className="mt-1 text-xs text-trail">+ {truncate(topTradeoff.pro, 55)}</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">− {truncate(topTradeoff.con, 55)}</div>
-            </div>
-          </div>
-        )}
 
         {/* Overnight preview */}
         <div className="pt-3 text-xs">
@@ -200,6 +188,3 @@ function LogisticsBadge({ icon, label, value, good }: { icon: React.ReactNode; l
   );
 }
 
-function truncate(s: string, n: number) {
-  return s.length > n ? s.slice(0, n) + "…" : s;
-}
