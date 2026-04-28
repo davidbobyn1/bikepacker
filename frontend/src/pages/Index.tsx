@@ -12,6 +12,7 @@ import RouteMap from "../components/route/RouteMap";
 import SavedRoutesList from "../components/saved/SavedRoutesList";
 import RouteCompareTable from "../components/saved/RouteCompareTable";
 import { useSavedRoutes } from "../hooks/useSavedRoutes";
+import CommunityRoutes from "../components/planner/CommunityRoutes";
 import bikeIllustration from "../assets/bike-illustration.png";
 
 type View = "planner" | "results" | "detail";
@@ -95,6 +96,31 @@ export default function Index() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleRide = (communityPrompt: string) => {
+    setPrompt(communityPrompt);
+    setTimeout(() => {
+      setLoading(true);
+      setError(null);
+      setView("results");
+      api.generateFull({ prompt: communityPrompt, riderProfile, preferences })
+        .then((response) => {
+          if (response.routes.length === 0 && response.no_results_reason) {
+            setError(response.no_results_reason);
+            setView("planner");
+          } else {
+            setRoutes(response.routes);
+            setTripContext(response.trip_context);
+            setActiveRouteId(response.routes[0]?.id ?? null);
+          }
+        })
+        .catch(() => {
+          setError("Something went wrong. Please try again.");
+          setView("planner");
+        })
+        .finally(() => setLoading(false));
+    }, 80);
   };
 
   const handleViewDetails = (route: RouteOption) => {
@@ -239,6 +265,11 @@ export default function Index() {
                 <p className="text-center text-xs text-muted-foreground/80 italic font-serif pt-1">
                   "The bicycle is a curious vehicle. Its passenger is its engine." — John Howard
                 </p>
+              </div>
+
+              {/* Community routes */}
+              <div className="border-t border-border pt-6">
+                <CommunityRoutes onRide={handleRide} />
               </div>
             </motion.div>
           )}
