@@ -45,6 +45,43 @@ const CARTO_STYLE: any = {
   ],
 };
 
+// ─── Additional basemap styles ────────────────────────────────────────────────
+const ESRI_SATELLITE_STYLE: any = {
+  version: 8,
+  sources: {
+    "esri-satellite": {
+      type: "raster",
+      // ESRI tile order is {z}/{y}/{x} — intentionally different from CARTO
+      tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+      tileSize: 256,
+      attribution: "© Esri, Maxar, Earthstar Geographics, USDA FSA, USGS, Aerogrid, IGN, IGP, and the GIS User Community",
+      maxzoom: 19,
+    },
+  },
+  layers: [{ id: "esri-satellite", type: "raster", source: "esri-satellite", minzoom: 0, maxzoom: 22 }],
+};
+
+const OPENTOPOMAP_STYLE: any = {
+  version: 8,
+  sources: {
+    "opentopomap": {
+      type: "raster",
+      tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
+      tileSize: 256,
+      attribution: '© <a href="https://opentopomap.org">OpenTopoMap</a> (CC-BY-SA)',
+      maxzoom: 17,
+    },
+  },
+  layers: [{ id: "opentopomap", type: "raster", source: "opentopomap", minzoom: 0, maxzoom: 22 }],
+};
+
+const BASEMAP_OPTIONS = [
+  { key: "voyager",   emoji: "🗺️",  label: "Map",       style: CARTO_STYLE },
+  { key: "satellite", emoji: "🛰️",  label: "Satellite", style: ESRI_SATELLITE_STYLE },
+  { key: "topo",      emoji: "⛰️",  label: "Topo",      style: OPENTOPOMAP_STYLE },
+] as const;
+type BasemapKey = typeof BASEMAP_OPTIONS[number]["key"];
+
 // ─── Component types ─────────────────────────────────────────────────────────
 interface RouteMapProps {
   route?: RouteOption;
@@ -217,6 +254,7 @@ export default function RouteMap({
   const [visibleTypes, setVisibleTypes] = useState<Set<PoiItem["type"]>>(
     new Set(["water", "campsite", "bike_shop"] as PoiItem["type"][])
   );
+  const [basemap, setBasemap] = useState<BasemapKey>("voyager");
 
   const routes: RouteOption[] = useMemo(
     () => multiRoutes ?? (singleRoute ? [singleRoute] : []),
@@ -389,6 +427,13 @@ export default function RouteMap({
     };
   }, [mapReady]);
 
+  // ── Swap basemap style ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!mapReady || !mapRef.current) return;
+    const selected = BASEMAP_OPTIONS.find((b) => b.key === basemap);
+    if (selected) mapRef.current.setStyle(selected.style);
+  }, [mapReady, basemap]);
+
   // ── Draw / redraw routes ───────────────────────────────────────────────────
   useEffect(() => {
     if (!mapReady || !mapRef.current) return;
@@ -514,7 +559,8 @@ export default function RouteMap({
         { padding: { top: 50, bottom: 90, left: 40, right: 40 }, duration: 700 }
       );
     }
-  }, [mapReady, routes, effectiveActiveId, compareMode, onRouteClick, activeRoute]);
+  // basemap included: setStyle() wipes custom layers, so we must redraw routes after a swap
+  }, [mapReady, routes, effectiveActiveId, compareMode, onRouteClick, activeRoute, basemap]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Elevation click → fly to ───────────────────────────────────────────────
   const flyTo = useCallback(([lat, lon]: [number, number]) => {
@@ -556,36 +602,60 @@ export default function RouteMap({
         .maplibregl-canvas-container { width: 100% !important; height: 100% !important; }
         .maplibregl-canvas { width: 100% !important; height: 100% !important; }
       `}</style>
-      {/* POI layer toggles — top-left, stays out of the nav controls (top-right) */}
+      {/* Map controls — top-left, stays out of nav controls (top-right) */}
       {mapReady && (
-        <div className="absolute top-3 left-3 z-10 flex gap-1.5 flex-wrap">
-          {POI_TOGGLES.map(({ type, emoji, label }) => {
-            const active = visibleTypes.has(type);
-            return (
+        <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5">
+          {/* POI layer toggles */}
+          <div className="flex gap-1.5 flex-wrap">
+            {POI_TOGGLES.map(({ type, emoji, label }) => {
+              const active = visibleTypes.has(type);
+              return (
+                <button
+                  key={type}
+                  onClick={() =>
+                    setVisibleTypes((prev) => {
+                      const next = new Set(prev) as Set<PoiItem["type"]>;
+                      if (next.has(type)) next.delete(type);
+                      else next.add(type);
+                      return next;
+                    })
+                  }
+                  style={{
+                    background: active ? "rgba(15,23,42,0.88)" : "rgba(15,23,42,0.50)",
+                    border: `1px solid ${active ? "rgba(148,163,184,0.5)" : "rgba(71,85,105,0.4)"}`,
+                    backdropFilter: "blur(6px)",
+                  }}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
+                    active ? "text-white" : "text-slate-500"
+                  }`}
+                >
+                  <span>{emoji}</span>
+                  <span className="hidden sm:inline">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Basemap style toggle */}
+          <div className="flex gap-1.5 flex-wrap">
+            {BASEMAP_OPTIONS.map(({ key, emoji, label }) => (
               <button
-                key={type}
-                onClick={() =>
-                  setVisibleTypes((prev) => {
-                    const next = new Set(prev) as Set<PoiItem["type"]>;
-                    if (next.has(type)) next.delete(type);
-                    else next.add(type);
-                    return next;
-                  })
-                }
+                key={key}
+                onClick={() => setBasemap(key)}
                 style={{
-                  background: active ? "rgba(15,23,42,0.88)" : "rgba(15,23,42,0.50)",
-                  border: `1px solid ${active ? "rgba(148,163,184,0.5)" : "rgba(71,85,105,0.4)"}`,
+                  background: basemap === key ? "rgba(15,23,42,0.92)" : "rgba(15,23,42,0.50)",
+                  border: `1px solid ${basemap === key ? "rgba(99,102,241,0.7)" : "rgba(71,85,105,0.4)"}`,
                   backdropFilter: "blur(6px)",
                 }}
                 className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium transition-all ${
-                  active ? "text-white" : "text-slate-500"
+                  basemap === key ? "text-white" : "text-slate-500"
                 }`}
               >
                 <span>{emoji}</span>
                 <span className="hidden sm:inline">{label}</span>
               </button>
-            );
-          })}
+            ))}
+          </div>
         </div>
       )}
 

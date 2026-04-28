@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { encodeRouteForUrl, buildShareUrl, decodeRouteFromUrl } from "../utils/shareLink";
 import { Compass, Loader2, Sparkles, MapPin, Clock, Ruler, Target, Layers, AlertCircle, Bookmark, ArrowRight } from "lucide-react";
 import type { RouteOption, RiderProfile, TripPreferences, TripContext } from "../types/route";
 import { api } from "../services/api";
@@ -42,6 +43,35 @@ export default function Index() {
     waterAccess: true,
     lowTraffic: true,
   });
+
+  // ── On mount: decode ?route= param and pre-load a shared route ───────────
+  useEffect(() => {
+    const param = new URLSearchParams(window.location.search).get("route");
+    if (!param) return;
+    try {
+      const route = decodeRouteFromUrl(param);
+      setRoutes([route]);
+      setSelectedRoute(route);
+      setActiveRouteId(route.id);
+      setView("detail");
+    } catch {
+      // Malformed or old link — silently ignore and stay on planner
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Share: encode active route and copy URL to clipboard ─────────────────
+  const handleShare = async (route: RouteOption) => {
+    try {
+      const encoded = encodeRouteForUrl(route);
+      const url = buildShareUrl(route, encoded);
+      await navigator.clipboard.writeText(url);
+    } catch {
+      // Clipboard blocked (non-HTTPS dev env) — fall back to prompt
+      const encoded = encodeRouteForUrl(route);
+      const url = buildShareUrl(route, encoded);
+      window.prompt("Copy share link:", url);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -292,6 +322,7 @@ export default function Index() {
                 onBack={() => { setView("results"); setSelectedRoute(null); }}
                 onSave={() => handleSaveToggle(selectedRoute)}
                 isSaved={isRouteSaved(selectedRoute.id)}
+                onShare={() => handleShare(selectedRoute)}
               />
             </motion.div>
           )}

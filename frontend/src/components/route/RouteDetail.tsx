@@ -4,7 +4,8 @@ import {
   ArrowLeft, Download, Loader2, Mountain, Ruler, Percent, Clock,
   ShoppingCart, Droplets, Building, AlertTriangle, Info, MapPin,
   Tent, Hotel, CheckCircle2, Eye, Shield, Flame, ChevronRight,
-  Moon, ArrowUpDown, Zap, ExternalLink, Bookmark, BookmarkCheck
+  Moon, ArrowUpDown, Zap, ExternalLink, Bookmark, BookmarkCheck,
+  Share2, Check,
 } from "lucide-react";
 import RouteMap from "./RouteMap";
 import ConfidenceBadge from "./ConfidenceBadge";
@@ -25,6 +26,7 @@ interface RouteDetailProps {
   onBack: () => void;
   onSave?: () => void;
   isSaved?: boolean;
+  onShare?: () => Promise<void>;
 }
 
 const archetypeIcons: Record<string, React.ReactNode> = {
@@ -46,10 +48,18 @@ const getRouteId = (gpxUrl: string): string => {
   return parts[parts.length - 1] || "";
 };
 
-export default function RouteDetail({ route, onBack, onSave, isSaved }: RouteDetailProps) {
+export default function RouteDetail({ route, onBack, onSave, isSaved, onShare }: RouteDetailProps) {
   const [expandedDay, setExpandedDay] = useState<number | null>(1);
   const [rwgpsLoading, setRwgpsLoading] = useState(false);
   const [rwgpsError, setRwgpsError] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const handleShare = async () => {
+    if (!onShare) return;
+    await onShare();
+    setShareCopied(true);
+    setTimeout(() => setShareCopied(false), 2500);
+  };
 
   const handleExportToRwgps = async () => {
     const routeId = getRouteId(route.gpx_url);
@@ -82,20 +92,31 @@ export default function RouteDetail({ route, onBack, onSave, isSaved }: RouteDet
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
-      {/* Back nav + Save */}
+      {/* Back nav + Save + Share */}
       <div className="flex items-center justify-between">
         <button onClick={onBack} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
           <ArrowLeft className="w-4 h-4" /> Back to route options
         </button>
-        {onSave && (
-          <button
-            onClick={onSave}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary text-foreground hover:opacity-80 transition-opacity"
-          >
-            {isSaved ? <BookmarkCheck className="w-3.5 h-3.5 text-primary" /> : <Bookmark className="w-3.5 h-3.5" />}
-            {isSaved ? "Saved" : "Save route"}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {onShare && (
+            <button
+              onClick={handleShare}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary text-foreground hover:opacity-80 transition-opacity"
+            >
+              {shareCopied ? <Check className="w-3.5 h-3.5 text-trail" /> : <Share2 className="w-3.5 h-3.5" />}
+              {shareCopied ? "Copied!" : "Share"}
+            </button>
+          )}
+          {onSave && (
+            <button
+              onClick={onSave}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-secondary text-foreground hover:opacity-80 transition-opacity"
+            >
+              {isSaved ? <BookmarkCheck className="w-3.5 h-3.5 text-primary" /> : <Bookmark className="w-3.5 h-3.5" />}
+              {isSaved ? "Saved" : "Save route"}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Hero header */}
