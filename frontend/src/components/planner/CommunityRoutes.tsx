@@ -1,12 +1,8 @@
 import { motion } from "framer-motion";
-import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { ExternalLink, CheckCircle2 } from "lucide-react";
 import { COMMUNITY_ROUTES } from "../../data/communityRoutes";
 
-interface Props {
-  onRide: (prompt: string) => void;
-}
-
-export default function CommunityRoutes({ onRide }: Props) {
+export default function CommunityRoutes() {
   return (
     <div className="space-y-4">
       {/* Section header */}
@@ -25,7 +21,7 @@ export default function CommunityRoutes({ onRide }: Props) {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.07, duration: 0.35 }}
-            className="flex-shrink-0 w-[260px] sm:w-auto bg-card border border-border rounded-xl p-4 flex flex-col hover:border-primary/40 hover:shadow-md transition-all cursor-default"
+            className="flex-shrink-0 w-[260px] sm:w-auto bg-card border border-border rounded-xl p-4 flex flex-col hover:border-primary/40 hover:shadow-md transition-all"
           >
             {/* Emoji + region */}
             <div className="flex items-center gap-2 mb-2">
@@ -67,13 +63,15 @@ export default function CommunityRoutes({ onRide }: Props) {
               {route.riderNote}
             </p>
 
-            {/* CTA */}
-            <button
-              onClick={() => onRide(route.prompt)}
+            {/* CTA — external link */}
+            <a
+              href={route.url}
+              target="_blank"
+              rel="noopener noreferrer"
               className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 active:bg-primary/30 transition-colors"
             >
-              Ride this route <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+              View on {route.urlLabel} <ExternalLink className="w-3 h-3" />
+            </a>
           </motion.div>
         ))}
       </div>

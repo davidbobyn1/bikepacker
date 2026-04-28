@@ -8,7 +8,8 @@ export interface CommunityRoute {
   tags: string[];
   description: string;
   riderNote: string;
-  prompt: string;
+  url: string;
+  urlLabel: string;
 }
 
 export const COMMUNITY_ROUTES: CommunityRoute[] = [
@@ -22,8 +23,8 @@ export const COMMUNITY_ROUTES: CommunityRoute[] = [
     tags: ["Gravel", "Camping", "Big climbs"],
     description: "High alpine passes, zero traffic, one gas-station resupply at Barrier Lake.",
     riderNote: "Rode September · Hit peak fall colour",
-    prompt:
-      "3 days in Kananaskis, Alberta. Mostly gravel, camping each night, aiming for 200–220 km total. Want big mountain climbs and minimal traffic. Strong intermediate rider.",
+    url: "https://bikepacking.com/routes/kananaskis-high-rockies-trail/",
+    urlLabel: "bikepacking.com",
   },
   {
     id: "marin-point-reyes",
@@ -35,8 +36,8 @@ export const COMMUNITY_ROUTES: CommunityRoute[] = [
     tags: ["Coastal", "Gravel", "Mixed surface"],
     description: "Fog, redwoods, and the Pacific coast in a single overnight from the Golden Gate.",
     riderNote: "Rode March · Cold but dry, wildflowers out",
-    prompt:
-      "2-day loop from Fairfax, California. Mix of gravel and paved, camping at Pantoll or Olema. Want coastal views, around 150–170 km, intermediate fitness.",
+    url: "https://www.ridewithgps.com/find/search?keywords=marin+headlands+point+reyes+bikepacking",
+    urlLabel: "ridewithgps.com",
   },
   {
     id: "vermont-kingdom",
@@ -48,8 +49,8 @@ export const COMMUNITY_ROUTES: CommunityRoute[] = [
     tags: ["Gravel", "Remote", "Fall foliage"],
     description: "Dirt roads through covered-bridge country — the original American gravel.",
     riderNote: "Rode October · Mud-free, colours peaking",
-    prompt:
-      "3-day gravel loop in Vermont's Northeast Kingdom, starting from St. Johnsbury. Mostly dirt and gravel roads, camping or small inns, 220–250 km. Intermediate rider, want remote and forested.",
+    url: "https://bikepacking.com/routes/northeast-kingdom-loop/",
+    urlLabel: "bikepacking.com",
   },
   {
     id: "cairngorms-traverse",
@@ -61,8 +62,8 @@ export const COMMUNITY_ROUTES: CommunityRoute[] = [
     tags: ["Remote", "Wild camping", "Hike-a-bike"],
     description: "Lochs, heather moorland, and bothies — bring a bothy bag and waterproofs.",
     riderNote: "Rode June · 18 hours of daylight, midges manageable",
-    prompt:
-      "4 days through the Cairngorms, Scotland, starting from Aviemore. Mix of gravel tracks and rough doubletrack, wild camping each night, 260–290 km. Strong rider comfortable with remote and exposed terrain.",
+    url: "https://bikepacking.com/routes/cairngorms-loop/",
+    urlLabel: "bikepacking.com",
   },
   {
     id: "girona-gravel",
@@ -74,7 +75,7 @@ export const COMMUNITY_ROUTES: CommunityRoute[] = [
     tags: ["Gravel", "Cycling culture", "Espresso stops"],
     description: "The roads pro teams train on — volcanic gravel, olive groves, and great coffee.",
     riderNote: "Rode April · Perfect temps, quiet roads",
-    prompt:
-      "2-day gravel loop from Girona, Spain. Famous cycling roads through the Garrotxa volcanic zone, mostly gravel, hotel or rural casa each night, 180–200 km. Intermediate to strong rider.",
+    url: "https://www.ridewithgps.com/find/search?keywords=girona+gravel+garrotxa",
+    urlLabel: "ridewithgps.com",
   },
 ];

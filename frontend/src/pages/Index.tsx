@@ -98,31 +98,6 @@ export default function Index() {
     }
   };
 
-  const handleRide = (communityPrompt: string) => {
-    setPrompt(communityPrompt);
-    setTimeout(() => {
-      setLoading(true);
-      setError(null);
-      setView("results");
-      api.generateFull({ prompt: communityPrompt, riderProfile, preferences })
-        .then((response) => {
-          if (response.routes.length === 0 && response.no_results_reason) {
-            setError(response.no_results_reason);
-            setView("planner");
-          } else {
-            setRoutes(response.routes);
-            setTripContext(response.trip_context);
-            setActiveRouteId(response.routes[0]?.id ?? null);
-          }
-        })
-        .catch(() => {
-          setError("Something went wrong. Please try again.");
-          setView("planner");
-        })
-        .finally(() => setLoading(false));
-    }, 80);
-  };
-
   const handleViewDetails = (route: RouteOption) => {
     setSelectedRoute(route);
     setActiveRouteId(route.id);
@@ -269,7 +244,7 @@ export default function Index() {
 
               {/* Community routes */}
               <div className="border-t border-border pt-6">
-                <CommunityRoutes onRide={handleRide} />
+                <CommunityRoutes />
               </div>
             </motion.div>
           )}
