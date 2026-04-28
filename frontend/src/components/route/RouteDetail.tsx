@@ -390,21 +390,45 @@ export default function RouteDetail({ route, onBack, onSave, isSaved, onShare }:
                       </div>
                     )}
 
-                    {/* Water & Grocery */}
-                    <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                      {seg.water_points.length > 0 && (
-                        <span className="flex items-center gap-1.5">
-                          <Droplets className="w-3.5 h-3.5 text-hotel" />
-                          <span className="font-medium text-foreground">Water:</span> {seg.water_points.join(" → ")}
-                        </span>
-                      )}
-                      {seg.grocery_points.length > 0 && (
-                        <span className="flex items-center gap-1.5">
-                          <ShoppingCart className="w-3.5 h-3.5" />
-                          <span className="font-medium text-foreground">Grocery:</span> {seg.grocery_points.join(" → ")}
-                        </span>
-                      )}
-                    </div>
+                    {/* Water & Grocery resupply points */}
+                    {(seg.water_points.length > 0 || seg.grocery_points.length > 0) && (
+                      <div className="space-y-2">
+                        {seg.water_points.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1">
+                              <Droplets className="w-3.5 h-3.5 text-hotel" /> Water sources
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {seg.water_points.map((pt, idx) => (
+                                <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-hotel/10 text-hotel text-[11px]">
+                                  💧 {pt.name}
+                                  {pt.distance_from_day_start_km != null && (
+                                    <span className="text-muted-foreground ml-0.5">· {pt.distance_from_day_start_km} km</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {seg.grocery_points.length > 0 && (
+                          <div>
+                            <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground mb-1">
+                              <ShoppingCart className="w-3.5 h-3.5" /> Resupply
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {seg.grocery_points.map((pt, idx) => (
+                                <span key={idx} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground text-[11px]">
+                                  🛒 {pt.name}
+                                  {pt.distance_from_day_start_km != null && (
+                                    <span className="text-muted-foreground ml-0.5">· {pt.distance_from_day_start_km} km</span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
 
                     {/* Overnight area */}
                     {seg.overnight_area && (
