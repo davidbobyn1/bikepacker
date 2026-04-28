@@ -76,12 +76,12 @@ Return a JSON object with exactly these fields:
     {{
       "day": 1,
       "headline": "Short evocative headline for this day (e.g. 'Into the hills')",
-      "narrative": "2-3 sentences describing what the rider will experience. Reference the actual distance, climbing, and surface data. Include one specific practical note (e.g. resupply, terrain warning, highlight).",
-      "key_advice": "One specific, actionable tip for this day"
+      "narrative": "2-3 sentences describing what the rider will experience. Reference the actual distance, climbing, and surface data. Include where the rider sleeps that night — if overnight_type is 'campsite' or 'dispersed', mention dispersed camping or a named campsite; if 'hotel' or 'motel', mention a town with accommodation. For the final day (is_final_day=true), mention the return to the start.",
+      "key_advice": "One specific, actionable tip for this day — e.g. water fill-up locations, timing, gear, or campsite booking advice"
     }}
   ],
   "terrain_summary": "1-2 sentences honestly describing the surface and terrain character based on the gravel_ratio and climbing data",
-  "logistics_note": "1-2 sentences on resupply, water, and overnight logistics based on the data provided",
+  "logistics_note": "1-2 sentences on resupply, water, and overnight logistics. Mention the overnight type for each night (campsite/dispersed camping/hotel) and whether advance booking is needed. If dispersed camping, note that no reservation is required but local regs apply.",
   "confidence_framing": "1 sentence honestly framing the confidence level of this route recommendation",
   "tradeoff_statement": "1 sentence naming the main tradeoff of choosing this route over the alternatives"
 }}

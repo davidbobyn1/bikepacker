@@ -157,10 +157,13 @@ def _design_loop_corridor(
         CorridorSpec with origin, destination (= origin for loops), and
         via_points defining the corridor shape.
     """
-    # Road distance is typically 1.4–1.6x the straight-line distance for cycling routes.
-    # We use a factor of 1.5 to size the corridor so Mapbox finds a route close to target_distance_km.
+    # Road distance is typically 1.6–2.2x the straight-line crow-flies distance for
+    # cycling loops (more in mountainous or grid-city areas, less on open terrain).
+    # We use a factor of 2.0 so Mapbox finds a route reasonably close to target_distance_km.
+    # A larger factor means wider corridors, which prevents Mapbox from shortcutting
+    # through the city centre and produces more interesting loops.
     # The loop circumference = 2π * radius, so radius = target / (2π * road_factor)
-    road_factor = 1.5
+    road_factor = 2.0
     radius_km = target_distance_km / (2 * math.pi * road_factor)
     # Convert km to approximate degrees (1 deg lat ≈ 111 km)
     radius_deg = radius_km / 111.0
@@ -427,6 +430,12 @@ def _resolve_origin(spec: TripSpec, mapbox_token: str = "") -> tuple[float, floa
     """
     Resolve the origin coordinates from the TripSpec.
     Uses Mapbox Geocoding API to resolve any location worldwide.
+
+    For city-level geocodes (place type = "place"), the result is the downtown
+    centroid.  Bikepacking trips start from trailheads or parking lots on the
+    city fringe, so we push the origin ~10–14 km northeast of the geocoded
+    centre so that Mapbox corridors extend into the surrounding countryside.
+
     Falls back to Fairfax, CA if geocoding fails.
     """
     import requests as _requests
@@ -455,7 +464,25 @@ def _resolve_origin(spec: TripSpec, mapbox_token: str = "") -> tuple[float, floa
         resp.raise_for_status()
         features = resp.json().get("features", [])
         if features:
-            lon, lat = features[0]["center"]
+            feature = features[0]
+            lon, lat = feature["center"]
+            place_types = feature.get("place_type", [])
+
+            # If this is a city-level geocode, push the origin outside the
+            # downtown core.  1 degree lat ≈ 111 km; 1 degree lon varies with
+            # latitude (≈ 111 * cos(lat) km).  We push ~0.10° N and ~0.08° E
+            # (≈ 11 km north and 6–9 km east depending on latitude), which
+            # is enough to clear most urban centres worldwide.
+            if "place" in place_types or "locality" in place_types:
+                lat_offset = 0.10    # ~11 km north
+                lon_offset = 0.08   # ~6–9 km east (varies by latitude)
+                lat += lat_offset
+                lon += lon_offset
+                logger.info(
+                    "City-level geocode for '%s' — offset origin by (%.2f°, %.2f°) to clear downtown",
+                    query, lat_offset, lon_offset,
+                )
+
             logger.info("Geocoded '%s' → (%.4f, %.4f)", query, lat, lon)
             return (lat, lon)
         logger.warning("Geocoding returned no results for '%s' — defaulting to Fairfax, CA", query)

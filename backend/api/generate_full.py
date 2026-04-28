@@ -114,6 +114,8 @@ def _build_route_data_for_narrative(
                 "gravel_ratio": seg.gravel_ratio,
                 "overnight_name": seg.overnight_name or "overnight stop",
                 "overnight_type": seg.overnight_type or "campsite",
+                # Tell Claude whether this is the final day (no overnight) or a mid-trip stop
+                "is_final_day": seg.day_number == route.trip_days,
             }
             for seg in route.day_segments
         ],
@@ -131,20 +133,34 @@ def _map_day_segment(seg, narrative_day: Optional[dict] = None) -> dict:
     overnight_area = None
     if seg.overnight_name and seg.overnight_coord:
         lat, lon = seg.overnight_coord
+        otype = seg.overnight_type or "campsite"
+
+        # Derive booking/reservation guidance based on overnight type
+        if otype in ("campsite", "dispersed"):
+            reservation_note = "No reservation required — dispersed camping. Confirm local regulations before departure."
+            amenities = ["Water (check ahead)", "Primitive toilets"]
+        elif otype in ("hotel", "motel"):
+            reservation_note = "Book in advance via booking.com or hotels.com."
+            amenities = ["Wifi", "Shower", "Parking"]
+        else:
+            reservation_note = "Confirm availability before departure."
+            amenities = []
+
         overnight_area = {
             "name": seg.overnight_name,
-            "description": f"{(seg.overnight_type or 'campsite').replace('_', ' ').capitalize()} stop",
+            "description": f"{otype.replace('_', ' ').capitalize()} stop",
             "coordinates": [lat, lon],
             "options": [{
                 "id": f"overnight-{seg.day_number}",
                 "name": seg.overnight_name,
-                "type": seg.overnight_type or "campsite",
+                "type": otype,
                 "distance_from_route_km": 0.0,
-                "description": seg.overnight_name,
-                "amenities": [],
+                "description": f"Night {seg.day_number} overnight stop",
+                "amenities": amenities,
                 "coordinates": [lat, lon],
+                "reservation_note": reservation_note,
             }],
-            "framing_note": "",
+            "framing_note": reservation_note,
         }
 
     headline = narrative_day.get("headline", f"Day {seg.day_number}") if narrative_day else f"Day {seg.day_number}"
@@ -189,17 +205,48 @@ def _map_route_to_response(
         for seg in route.day_segments
     ]
 
-    overnight_areas = [
-        {
-            "name": seg.overnight_name or f"Night {seg.day_number}",
-            "description": f"Night {seg.day_number} overnight stop",
-            "coordinates": list(seg.overnight_coord) if seg.overnight_coord else [0, 0],
-            "options": [],
-            "framing_note": "",
+    overnight_areas = []
+    for seg in route.day_segments[:-1]:
+        if not seg.overnight_name:
+            continue
+        otype = seg.overnight_type or "campsite"
+        coords = list(seg.overnight_coord) if seg.overnight_coord else [0, 0]
+
+        # Derive a booking/info note based on overnight type
+        if otype in ("campsite", "dispersed"):
+            booking_note = "No booking required — dispersed camping area. Check local regulations before departure."
+            booking_url = None
+        elif otype in ("hotel", "motel"):
+            booking_note = "Hotel accommodation — search booking.com or hotels.com for availability."
+            booking_url = f"https://www.booking.com/searchresults.html?ss={seg.overnight_name}"
+        else:
+            booking_note = "Confirm availability before departure."
+            booking_url = None
+
+        option = {
+            "id": f"overnight-{seg.day_number}",
+            "name": seg.overnight_name,
+            "type": otype,
+            "distance_from_route_km": 0.0,
+            "description": f"Night {seg.day_number} {otype.replace('_', ' ')} stop",
+            "amenities": (
+                ["Water", "Toilets"] if otype == "campsite"
+                else ["Wifi", "Shower", "Parking"] if otype in ("hotel", "motel")
+                else []
+            ),
+            "coordinates": coords,
+            "booking_note": booking_note,
         }
-        for seg in route.day_segments[:-1]
-        if seg.overnight_name
-    ]
+        if booking_url:
+            option["booking_url"] = booking_url
+
+        overnight_areas.append({
+            "name": seg.overnight_name,
+            "description": f"Night {seg.day_number} overnight stop",
+            "coordinates": coords,
+            "options": [option],
+            "framing_note": booking_note,
+        })
 
     route_id = f"{request_id}-{rank}"
     gpx_url = f"/api/gpx/{route_id}"

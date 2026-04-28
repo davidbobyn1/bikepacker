@@ -252,8 +252,16 @@ export default function RouteMap({
 
     let cancelled = false;
     api.getPois(south, west, north, east, "water,campsite,bike_shop", activeRoute.geometry)
-      .then((data) => { if (!cancelled) setPois(data.pois); })
-      .catch(() => { /* silently skip if Overpass is down */ });
+      .then((data) => {
+        if (!cancelled) {
+          console.debug(`[POI] Loaded ${data.pois.length} POIs for route ${activeRoute.id}`);
+          setPois(data.pois);
+        }
+      })
+      .catch((err) => {
+        // Log so we can diagnose Overpass/backend failures
+        console.error("[POI] Failed to fetch POIs:", err);
+      });
 
     return () => { cancelled = true; };
   }, [activeRoute?.id]); // eslint-disable-line react-hooks/exhaustive-deps
